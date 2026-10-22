@@ -215,32 +215,82 @@ const OMR = (() => {
     if (elegido.f.marca < 0.5 || elegido.f.an < 0.35 || elegido.f.hu > 0.3) return { ok: false, error: 'La hoja no se ve con claridad. Repite la foto de una sola tirilla, de frente, con buena luz y sin sombras.' };
     const H = elegido.H;
     const lista = burbujas();
+    // Gris medio en un disco de la plantilla (mm)
+    const grisDisco = (x0, y0, rm) => {
+      let n = 0, t = 0; const K = 4;
+      for (let i = -K; i <= K; i++) for (let j = -K; j <= K; j++) {
+        if (i * i + j * j > K * K) continue;
+        const [u, v] = aplicar(H, x0 + (rm * i) / K, y0 + (rm * j) / K);
+        const px = Math.round(u), py = Math.round(v);
+        if (px < 0 || py < 0 || px >= w || py >= h) continue;
+        n++; t += g[py * w + px];
+      }
+      return n ? t / n : 255;
+    };
+    // Papel (huecos entre burbujas) y tinta (cuadros negros) de esta foto
+    const papeles = HUECOS.map(([x, y]) => grisDisco(x, y, 0.6)).sort((p, q) => p - q);
+    const papel = papeles[Math.floor(papeles.length * 0.6)];
+    const tinta = T.fid.map(([x, y]) => grisDisco(x, y, 2)).reduce((p, q) => p + q, 0) / 4;
+    const rango = Math.max(25, papel - tinta);
+    // Papel justo alrededor de cada burbuja (corrige sombras y luz desigual)
+    const papelLocal = (x0, y0) => {
+      const v = [];
+      for (let k = 0; k < 16; k++) {
+        const t = (k * Math.PI) / 8;
+        const [u, vv] = aplicar(H, x0 + 3.2 * Math.cos(t), y0 + 3.2 * Math.sin(t));
+        const px = Math.round(u), py = Math.round(vv);
+        if (px >= 0 && py >= 0 && px < w && py < h) v.push(g[py * w + px]);
+      }
+      if (!v.length) return papel;
+      v.sort((p, q) => p - q);
+      return v[Math.floor(v.length * 0.7)];
+    };
     for (const b of lista) {
-      b.s = oscuridad(bin, w, h, H, b.x, b.y, 1.5);
+      b.f = oscuridad(bin, w, h, H, b.x, b.y, 1.5);                       // cuánto del círculo está cubierto
+      b.d = Math.max(0, Math.min(1, (papelLocal(b.x, b.y) - grisDisco(b.x, b.y, 1.4)) / rango)); // qué tan oscuro es, frente al papel de alrededor
       [b.u, b.v] = aplicar(H, b.x, b.y);
     }
+    // Referencia: qué tan oscuras son las marcas de ESTE estudiante
+    const tops = [];
+    for (let k = 0; k < T.q.n; k++) {
+      const bs = lista.filter((b) => b.tipo === 'q' && b.q === k && b.f >= 0.4);
+      if (bs.length) tops.push(Math.max(...bs.map((b) => b.d)));
+    }
+    tops.sort((p, q) => p - q);
+    const ref = tops.length ? Math.max(0.25, tops[Math.floor((tops.length - 1) * 0.8)]) : 1;
+    for (const b of lista) { b.r = Math.min(1.2, b.d / ref); b.s = b.f >= 0.4 ? Math.min(1, b.r) : Math.min(b.r, b.f); }
     // Escala aproximada (píxeles por mm) para dibujar
     const [ax, ay] = aplicar(H, 0, 23), [bx, by] = aplicar(H, 180, 23);
     const pxmm = Math.hypot(bx - ax, by - ay) / 180;
-    const MARCA = 0.42, DIF = 0.25;
-    const decidir = (sc) => {
-      const idx = sc.map((s, i) => [s, i]).sort((a, b) => b[0] - a[0]);
-      if (idx[0][0] < MARCA) return { v: null, estado: 'vacia' };
-      if (idx[1][0] >= MARCA && idx[0][0] - idx[1][0] < DIF) return { v: null, estado: 'multiple' };
-      return { v: idx[0][1], estado: 'ok' };
+    // e = cuánto más oscura es la burbuja que la más clara de su misma fila (resta el fondo y la letra impresa)
+    const MARCA_E = 0.3, COB = 0.4, RASTRO = 0.12;
+    const decidir = (bs) => {
+      const base = Math.min(...bs.map((b) => b.r));
+      const e = bs.map((b) => b.r - base);
+      const marc = bs.map((b, i) => i).filter((i) => bs[i].f >= COB && e[i] >= MARCA_E).sort((p, q) => e[q] - e[p]);
+      const otro = (excl) => Math.max(0, ...e.filter((_, i) => i !== excl));
+      if (!marc.length) return { v: null, estado: 'vacia', dudosa: Math.max(...e) >= RASTRO };
+      if (marc.length > 1) {
+        if (e[marc[0]] - e[marc[1]] >= 0.35) return { v: marc[0], estado: 'ok', dudosa: true };
+        return { v: null, estado: 'multiple', dudosa: false };
+      }
+      const i = marc[0];
+      return { v: i, estado: 'ok', dudosa: bs[i].f < 0.7 || e[i] < 0.5 || otro(i) >= RASTRO };
     };
-    const resp = [];
+    const resp = [], dudosas = [];
     for (let k = 0; k < T.q.n; k++) {
-      const sc = LET.map((_, c) => lista.find((b) => b.tipo === 'q' && b.q === k && b.c === c).s);
-      const d = decidir(sc);
+      const bs = LET.map((_, c) => lista.find((b) => b.tipo === 'q' && b.q === k && b.c === c));
+      const d = decidir(bs);
       resp.push(d.estado === 'ok' ? LET[d.v] : d.estado === 'multiple' ? '*' : '-');
+      if (d.dudosa) dudosas.push(k);
     }
-    const dec = decidir(lista.filter((b) => b.tipo === 'dec').map((b) => b.s));
-    const uni = decidir(lista.filter((b) => b.tipo === 'uni').map((b) => b.s));
+    const dec = decidir(lista.filter((b) => b.tipo === 'dec'));
+    const uni = decidir(lista.filter((b) => b.tipo === 'uni'));
     let numero = null;
     if (uni.estado === 'ok' && dec.estado !== 'multiple') numero = (dec.estado === 'ok' ? dec.v * 10 : 0) + uni.v;
     return {
-      ok: true, respuestas: resp.join(''), numero, burbujas: lista, pxmm,
+      ok: true, respuestas: resp.join(''), numero, burbujas: lista, pxmm, dudosas,
+      numeroDudoso: dec.dudosa || uni.dudosa || dec.estado === 'multiple' || uni.estado !== 'ok',
       esquinas: elegido.dst, estadoNumero: { dec: dec.estado, uni: uni.estado },
     };
   }

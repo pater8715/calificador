@@ -1,5 +1,5 @@
 // Funciona sin internet: guarda la app la primera vez y la actualiza cuando hay conexión.
-const VERSION = 'calificador-v1';
+const VERSION = 'calificador-v2';
 const BASE = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(VERSION).then((c) => c.addAll(BASE))); self.skipWaiting(); });
 self.addEventListener('activate', (e) => {

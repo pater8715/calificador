@@ -4,6 +4,8 @@ App web instalable para calificar con la cámara del iPhone las hojas de respues
 
 - **Escaneo en vivo:** apunta la cámara a una tirilla; cuando ve los cuatro cuadros negros, lee el número de lista y las respuestas.
 - **Corrección manual:** toca una burbuja o una casilla para cambiar una lectura dudosa.
+- **Marcas dudosas:** borrones, marcas muy claras o círculos a medio rellenar quedan resaltados para que los confirmes antes de guardar.
+- **Sonido:** un pitido cuando la hoja se lee clara; dos tonos cuando hay algo que revisar.
 - **Resultados por grupo:** nota de 1,0 a 5,0, desempeño, promedio, quiénes faltan; exporta CSV o copia para Excel.
 - **Análisis por pregunta:** porcentaje de aciertos y qué opción incorrecta escogió el grupo.
 - **Privacidad:** listas y notas se guardan solo en el teléfono (localStorage). Este repositorio no contiene datos de estudiantes.

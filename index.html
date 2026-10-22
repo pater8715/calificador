@@ -105,6 +105,10 @@ main { padding-top: 18px; display: grid; gap: 16px; }
 .celda.mal .l { color: var(--bad); }
 .celda.vacia .l, .celda.multiple .l { color: var(--warn); }
 .celda.vacia, .celda.multiple { background: var(--warn-soft); }
+.celda.dudosa { box-shadow: 0 0 0 3px var(--warn); }
+.celda.dudosa .k { color: var(--warn); font-family: var(--font); font-weight: 700; }
+.alerta.revisar { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; border: 2px solid var(--warn); }
+.alerta.revisar > div { flex: 1 1 220px; min-width: 0; }
 .alertas { display: grid; gap: 6px; }
 .alerta { font-size: 14px; padding: 8px 10px; border-radius: 8px; background: var(--warn-soft); color: var(--warn); }
 .alerta.error { background: var(--bad-soft); color: var(--bad); }
@@ -418,32 +422,82 @@ const OMR = (() => {
     if (elegido.f.marca < 0.5 || elegido.f.an < 0.35 || elegido.f.hu > 0.3) return { ok: false, error: 'La hoja no se ve con claridad. Repite la foto de una sola tirilla, de frente, con buena luz y sin sombras.' };
     const H = elegido.H;
     const lista = burbujas();
+    // Gris medio en un disco de la plantilla (mm)
+    const grisDisco = (x0, y0, rm) => {
+      let n = 0, t = 0; const K = 4;
+      for (let i = -K; i <= K; i++) for (let j = -K; j <= K; j++) {
+        if (i * i + j * j > K * K) continue;
+        const [u, v] = aplicar(H, x0 + (rm * i) / K, y0 + (rm * j) / K);
+        const px = Math.round(u), py = Math.round(v);
+        if (px < 0 || py < 0 || px >= w || py >= h) continue;
+        n++; t += g[py * w + px];
+      }
+      return n ? t / n : 255;
+    };
+    // Papel (huecos entre burbujas) y tinta (cuadros negros) de esta foto
+    const papeles = HUECOS.map(([x, y]) => grisDisco(x, y, 0.6)).sort((p, q) => p - q);
+    const papel = papeles[Math.floor(papeles.length * 0.6)];
+    const tinta = T.fid.map(([x, y]) => grisDisco(x, y, 2)).reduce((p, q) => p + q, 0) / 4;
+    const rango = Math.max(25, papel - tinta);
+    // Papel justo alrededor de cada burbuja (corrige sombras y luz desigual)
+    const papelLocal = (x0, y0) => {
+      const v = [];
+      for (let k = 0; k < 16; k++) {
+        const t = (k * Math.PI) / 8;
+        const [u, vv] = aplicar(H, x0 + 3.2 * Math.cos(t), y0 + 3.2 * Math.sin(t));
+        const px = Math.round(u), py = Math.round(vv);
+        if (px >= 0 && py >= 0 && px < w && py < h) v.push(g[py * w + px]);
+      }
+      if (!v.length) return papel;
+      v.sort((p, q) => p - q);
+      return v[Math.floor(v.length * 0.7)];
+    };
     for (const b of lista) {
-      b.s = oscuridad(bin, w, h, H, b.x, b.y, 1.5);
+      b.f = oscuridad(bin, w, h, H, b.x, b.y, 1.5);                       // cuánto del círculo está cubierto
+      b.d = Math.max(0, Math.min(1, (papelLocal(b.x, b.y) - grisDisco(b.x, b.y, 1.4)) / rango)); // qué tan oscuro es, frente al papel de alrededor
       [b.u, b.v] = aplicar(H, b.x, b.y);
     }
+    // Referencia: qué tan oscuras son las marcas de ESTE estudiante
+    const tops = [];
+    for (let k = 0; k < T.q.n; k++) {
+      const bs = lista.filter((b) => b.tipo === 'q' && b.q === k && b.f >= 0.4);
+      if (bs.length) tops.push(Math.max(...bs.map((b) => b.d)));
+    }
+    tops.sort((p, q) => p - q);
+    const ref = tops.length ? Math.max(0.25, tops[Math.floor((tops.length - 1) * 0.8)]) : 1;
+    for (const b of lista) { b.r = Math.min(1.2, b.d / ref); b.s = b.f >= 0.4 ? Math.min(1, b.r) : Math.min(b.r, b.f); }
     // Escala aproximada (píxeles por mm) para dibujar
     const [ax, ay] = aplicar(H, 0, 23), [bx, by] = aplicar(H, 180, 23);
     const pxmm = Math.hypot(bx - ax, by - ay) / 180;
-    const MARCA = 0.42, DIF = 0.25;
-    const decidir = (sc) => {
-      const idx = sc.map((s, i) => [s, i]).sort((a, b) => b[0] - a[0]);
-      if (idx[0][0] < MARCA) return { v: null, estado: 'vacia' };
-      if (idx[1][0] >= MARCA && idx[0][0] - idx[1][0] < DIF) return { v: null, estado: 'multiple' };
-      return { v: idx[0][1], estado: 'ok' };
+    // e = cuánto más oscura es la burbuja que la más clara de su misma fila (resta el fondo y la letra impresa)
+    const MARCA_E = 0.3, COB = 0.4, RASTRO = 0.12;
+    const decidir = (bs) => {
+      const base = Math.min(...bs.map((b) => b.r));
+      const e = bs.map((b) => b.r - base);
+      const marc = bs.map((b, i) => i).filter((i) => bs[i].f >= COB && e[i] >= MARCA_E).sort((p, q) => e[q] - e[p]);
+      const otro = (excl) => Math.max(0, ...e.filter((_, i) => i !== excl));
+      if (!marc.length) return { v: null, estado: 'vacia', dudosa: Math.max(...e) >= RASTRO };
+      if (marc.length > 1) {
+        if (e[marc[0]] - e[marc[1]] >= 0.35) return { v: marc[0], estado: 'ok', dudosa: true };
+        return { v: null, estado: 'multiple', dudosa: false };
+      }
+      const i = marc[0];
+      return { v: i, estado: 'ok', dudosa: bs[i].f < 0.7 || e[i] < 0.5 || otro(i) >= RASTRO };
     };
-    const resp = [];
+    const resp = [], dudosas = [];
     for (let k = 0; k < T.q.n; k++) {
-      const sc = LET.map((_, c) => lista.find((b) => b.tipo === 'q' && b.q === k && b.c === c).s);
-      const d = decidir(sc);
+      const bs = LET.map((_, c) => lista.find((b) => b.tipo === 'q' && b.q === k && b.c === c));
+      const d = decidir(bs);
       resp.push(d.estado === 'ok' ? LET[d.v] : d.estado === 'multiple' ? '*' : '-');
+      if (d.dudosa) dudosas.push(k);
     }
-    const dec = decidir(lista.filter((b) => b.tipo === 'dec').map((b) => b.s));
-    const uni = decidir(lista.filter((b) => b.tipo === 'uni').map((b) => b.s));
+    const dec = decidir(lista.filter((b) => b.tipo === 'dec'));
+    const uni = decidir(lista.filter((b) => b.tipo === 'uni'));
     let numero = null;
     if (uni.estado === 'ok' && dec.estado !== 'multiple') numero = (dec.estado === 'ok' ? dec.v * 10 : 0) + uni.v;
     return {
-      ok: true, respuestas: resp.join(''), numero, burbujas: lista, pxmm,
+      ok: true, respuestas: resp.join(''), numero, burbujas: lista, pxmm, dudosas,
+      numeroDudoso: dec.dudosa || uni.dudosa || dec.estado === 'multiple' || uni.estado !== 'ok',
       esquinas: elegido.dst, estadoNumero: { dec: dec.estado, uni: uni.estado },
     };
   }
@@ -485,6 +539,32 @@ const idSeguro = (s) => String(s).replace(/[^A-Za-z0-9_\-]/g, '_').slice(0, 60);
 function toast(msg) {
   const t = $('#toast'); t.textContent = msg; t.hidden = false;
   clearTimeout(toast._t); toast._t = setTimeout(() => { t.hidden = true; }, 2600);
+}
+
+// ---------------------------------------------------------------- sonido
+// Se prepara con el primer toque (los teléfonos no dejan sonar antes de un gesto)
+const Sonido = { ctx: null };
+function prepararSonido() {
+  try {
+    if (!Sonido.ctx) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) Sonido.ctx = new AC(); }
+    if (Sonido.ctx && Sonido.ctx.state === 'suspended') Sonido.ctx.resume();
+  } catch (e) {}
+}
+document.addEventListener('pointerdown', prepararSonido, { capture: true });
+function sonar(tipo) {
+  if (!S.config || S.config.sonido === false || !Sonido.ctx) return;
+  try {
+    const c = Sonido.ctx, t0 = c.currentTime + 0.02;
+    const tono = (f, ini, dur) => {
+      const o = c.createOscillator(), gn = c.createGain();
+      o.type = 'sine'; o.frequency.value = f;
+      gn.gain.setValueAtTime(0.0001, t0 + ini); gn.gain.exponentialRampToValueAtTime(0.35, t0 + ini + 0.015);
+      gn.gain.exponentialRampToValueAtTime(0.0001, t0 + ini + dur);
+      o.connect(gn).connect(c.destination); o.start(t0 + ini); o.stop(t0 + ini + dur + 0.02);
+    };
+    if (tipo === 'ok') tono(1046, 0, 0.16);
+    else { tono(523, 0, 0.14); tono(392, 0.18, 0.2); }
+  } catch (e) {}
 }
 
 // ---------------------------------------------------------------- almacenamiento
@@ -632,6 +712,7 @@ function tarjetaResultado() {
   const inNum = h('input', { type: 'number', id: 'inNumero', min: '1', max: '49', inputmode: 'numeric', value: a.numero ?? '' });
   const nom = h('div', { class: 'nombre', id: 'nombreEst' }, nombreDe(a.numero) || (a.numero ? 'Sin nombre en la lista' : ''));
   inNum.addEventListener('input', () => {
+    a.numeroDudoso = false;
     const v = parseInt(inNum.value, 10);
     a.numero = Number.isFinite(v) && v > 0 ? v : null;
     nom.textContent = nombreDe(a.numero) || (a.numero ? 'Sin nombre en la lista' : '');
@@ -650,8 +731,8 @@ function tarjetaResultado() {
   pintarAlertas(alertas);
   card.append(alertas);
   card.append(h('div', { class: 'fila-botones' },
-    h('button', { class: 'btn primario', id: 'btnGuardar', disabled: a.ejemplo, onclick: () => guardarActual(true) }, 'Guardar y escanear otra'),
-    h('button', { class: 'btn', id: 'btnGuardarSolo', disabled: a.ejemplo, onclick: () => guardarActual(false) }, 'Guardar'),
+    h('button', { class: 'btn primario', id: 'btnGuardar', disabled: a.ejemplo || !a.numero || a.dudosas.size > 0 || a.numeroDudoso, onclick: () => guardarActual(true) }, 'Guardar y escanear otra'),
+    h('button', { class: 'btn', id: 'btnGuardarSolo', disabled: a.ejemplo || !a.numero || a.dudosas.size > 0 || a.numeroDudoso, onclick: () => guardarActual(false) }, 'Guardar'),
     h('button', { class: 'btn peligro', onclick: () => { S.actual = null; pintar(); } }, 'Descartar')));
   return card;
 }
@@ -675,12 +756,15 @@ function pintarRejilla(rej) {
     const k = clave[i] || '';
     let cls = 'celda';
     if (r === '-') cls += ' vacia'; else if (r === '*') cls += ' multiple'; else if (k) cls += r === k ? ' bien' : ' mal';
+    const dud = a.dudosas && a.dudosas.has(i);
+    if (dud) cls += ' dudosa';
     rej.append(h('button', { class: cls, 'aria-label': 'Pregunta ' + (i + 1) + ': ' + (r === '-' ? 'sin marcar' : r === '*' ? 'doble marca' : r), onclick: () => {
       const orden = ['A', 'B', 'C', 'D', '-'];
       const j = orden.indexOf(r);
       a.resp = a.resp.slice(0, i) + orden[(j + 1) % orden.length] + a.resp.slice(i + 1);
+      if (a.dudosas) a.dudosas.delete(i);
       a.manual = true; refrescarNota();
-    } }, h('span', { class: 'n' }, String(i + 1)), h('span', { class: 'l' }, r === '-' ? '·' : r === '*' ? '2×' : r), h('span', { class: 'k' }, r !== k && k ? k : '')));
+    } }, h('span', { class: 'n' }, String(i + 1)), h('span', { class: 'l' }, r === '-' ? '·' : r === '*' ? '2×' : r), h('span', { class: 'k' }, dud ? '¿?' : (r !== k && k ? k : ''))));
   }
 }
 function pintarAlertas(cont) {
@@ -690,9 +774,18 @@ function pintarAlertas(cont) {
   if (dobles.length) msgs.push(['', 'Doble marca en ' + dobles.join(', ') + '. Cuenta como incorrecta; corrígela si se ve claro cuál quiso marcar.']);
   if (vacias.length) msgs.push(['', 'Sin marcar: ' + vacias.join(', ') + '.']);
   if (!a.numero) msgs.push(['error', 'No se pudo leer el número de lista. Escríbelo arriba para guardar.']);
+  else if (a.numeroDudoso) msgs.push(['', 'Revisa el número de lista: la marca no se ve clara. Si está bien, toca «Están bien».']);
   else if (!a.ejemplo && filas()[a.numero]) { const prev = calificar(filas()[a.numero].resp); msgs.push(['', 'El N.° ' + a.numero + ' ya tiene nota ' + coma(prev.nota) + ' en este grupo. Si guardas, se reemplaza.']); }
-  cont.replaceChildren(...msgs.map(([c, m]) => h('div', { class: 'alerta ' + c }, m)));
-  const bloq = !a.numero || a.ejemplo;
+  const pend = a.dudosas ? [...a.dudosas].sort((x, y) => x - y).map((x) => x + 1) : [];
+  const nodos = msgs.map(([c, m]) => h('div', { class: 'alerta ' + c }, m));
+  if (pend.length || a.numeroDudoso) {
+    nodos.unshift(h('div', { class: 'alerta revisar' },
+      h('div', {}, pend.length ? h('b', {}, 'Marcas dudosas en ' + pend.join(', ') + '. ') : null,
+        pend.length ? 'Pueden ser un borrón, una marca muy clara o un círculo a medio rellenar. Mira la foto: toca la casilla para cambiarla o, si la lectura es correcta, confírmala.' : ''),
+      h('button', { class: 'btn chico', id: 'btnConfirmarDudas', onclick: () => { a.dudosas = new Set(); a.numeroDudoso = false; refrescarNota(); } }, 'Están bien')));
+  }
+  cont.replaceChildren(...nodos);
+  const bloq = !a.numero || a.ejemplo || pend.length > 0 || a.numeroDudoso;
   const g1 = $('#btnGuardar'), g2 = $('#btnGuardarSolo');
   if (g1) g1.disabled = bloq; if (g2) g2.disabled = bloq;
 }
@@ -747,6 +840,11 @@ function dibujarLectura(cv) {
     }
   }
   ctx.setLineDash([]);
+  if (a.dudosas) for (const q of a.dudosas) {
+    const x = OMR.T.q.x0 + q * OMR.T.q.dx;
+    ctx.lineWidth = lw; ctx.strokeStyle = '#e09a12';
+    ctx.strokeRect(X(x - 3.6), Y(16.4), 7.2 * s, 25 * s);
+  }
   cv.onclick = (ev) => {
     const rect = cv.getBoundingClientRect();
     const xm = ((ev.clientX - rect.left) / rect.width) * R.WM + R.X0;
@@ -756,6 +854,7 @@ function dibujarLectura(cv) {
     if (!mejor || dm > 4) return;
     const L = LETRAS[mejor.c];
     a.resp = a.resp.slice(0, mejor.q) + (a.resp[mejor.q] === L ? '-' : L) + a.resp.slice(mejor.q + 1);
+    if (a.dudosas) a.dudosas.delete(mejor.q);
     a.manual = true; refrescarNota();
   };
 }
@@ -791,7 +890,8 @@ function leerCanvas(cv, ejemplo) {
   if (!r.ok) { S.actual = null; pintar(); mostrarError(r.error); return; }
   // Recalcular H con las esquinas elegidas (para recorte y toques)
   r.H = homografiaDe(r.esquinas);
-  S.actual = { lectura: r, canvas: cv, resp: r.respuestas, numero: r.numero, ejemplo, manual: false };
+  S.actual = { lectura: r, canvas: cv, resp: r.respuestas, numero: r.numero, ejemplo, manual: false, dudosas: new Set(r.dudosas || []), numeroDudoso: !!r.numeroDudoso && r.numero != null };
+  if (!ejemplo) sonar(S.actual.dudosas.size || S.actual.numeroDudoso || r.numero == null ? 'revisar' : 'ok');
   pintar();
   const card = $('#resultado'); if (card && !ejemplo) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -1004,6 +1104,7 @@ function vistaAjustes() {
     h('label', { class: 'campo', for: 'inNomExamen' }, h('span', {}, 'Nombre'), inNom),
     h('label', { class: 'campo', for: 'inClave' }, h('span', {}, 'Clave de respuestas (en orden, de la 1 a la 20)'), inClave), estadoClave,
     h('div', { class: 'campo' }, h('span', {}, 'Cómo se calcula la nota'), radios),
+    h('div', { class: 'radios' }, h('label', { for: 'chkSonido' }, (() => { const c = h('input', { type: 'checkbox', id: 'chkSonido', checked: S.config.sonido !== false }); c.addEventListener('change', async () => { S.config.sonido = c.checked; try { await guardarConfig(); } catch (e) {} if (c.checked) { prepararSonido(); sonar('ok'); } }); return c; })(), h('span', {}, 'Sonido al leer una hoja: un pitido si todo está claro, dos tonos si hay algo que revisar'))),
     h('div', { class: 'campo' }, h('span', {}, 'Desempeños (desde)'), h('div', { class: 'umbral' },
       h('label', { class: 'campo', for: 'inBas' }, h('span', {}, 'Básico'), inB), h('label', { class: 'campo', for: 'inAlt' }, h('span', {}, 'Alto'), inA), h('label', { class: 'campo', for: 'inSup' }, h('span', {}, 'Superior'), inS)),
       h('div', { class: 'ayuda' }, 'Por defecto, la escala nacional del Decreto 1290. Ajústala si el SIEE del colegio usa otros rangos.')),
