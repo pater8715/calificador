@@ -1,0 +1,1256 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Calificador</title>
+<meta name="description" content="Califica con la cámara del iPhone las hojas de respuesta de Matemáticas 5°.">
+<meta name="theme-color" content="#1d5ea8">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Calificador">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<style>
+/* Layout: una columna de herramienta (máx. 760px), pestañas fijas arriba, tarjetas solo donde hay resultado */
+:root {
+  --bg: #f3f5f6;
+  --surface: #ffffff;
+  --sunk: #e9edf0;
+  --ink: #16202a;
+  --muted: #59656f;
+  --line: #d6dde2;
+  --accent: #1d5ea8;
+  --accent-ink: #ffffff;
+  --ok: #1b7a45;
+  --ok-soft: #e1f2e8;
+  --bad: #b23a30;
+  --bad-soft: #f8e3e0;
+  --warn: #9a6200;
+  --warn-soft: #f9edd6;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f151b; --surface: #17212a; --sunk: #1f2a35; --ink: #e5ecf2; --muted: #98a6b2; --line: #2a3744;
+    --accent: #6ea8ee; --accent-ink: #0b1622; --ok: #52c487; --ok-soft: #173327; --bad: #f07f73; --bad-soft: #3a1e1c;
+    --warn: #e2a845; --warn-soft: #3a2c12; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f151b; --surface: #17212a; --sunk: #1f2a35; --ink: #e5ecf2; --muted: #98a6b2; --line: #2a3744;
+  --accent: #6ea8ee; --accent-ink: #0b1622; --ok: #52c487; --ok-soft: #173327; --bad: #f07f73; --bad-soft: #3a1e1c;
+  --warn: #e2a845; --warn-soft: #3a2c12; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 16px; line-height: 1.45; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 760px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 0 48px; }
+header.barra { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); }
+header .wrap { padding-block: 10px 0; display: grid; gap: 8px; }
+.titulo { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.titulo h1 { font-size: 18px; margin: 0; letter-spacing: 0.01em; text-wrap: balance; }
+.titulo .guardado { font-size: 13px; color: var(--muted); }
+.selectores { display: flex; gap: 8px; flex-wrap: wrap; }
+.selectores label { display: grid; gap: 2px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; flex: 1 1 140px; min-width: 0; }
+.selectores select { padding: 6px 8px; font-size: 15px; }
+select, input[type="text"], input[type="number"], textarea {
+  font: inherit; font-size: 16px; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%;
+}
+textarea { min-height: 140px; resize: vertical; font-size: 15px; }
+select:focus-visible, input:focus-visible, textarea:focus-visible, button:focus-visible, .btn:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
+nav.pestanas { display: flex; gap: 2px; overflow-x: auto; }
+nav.pestanas button { flex: 1 0 auto; font: inherit; font-weight: 700; font-size: 15px; background: none; border: none; color: var(--muted); padding: 8px 10px; border-bottom: 3px solid transparent; cursor: pointer; }
+nav.pestanas button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+main { padding-top: 18px; display: grid; gap: 16px; }
+.aviso { font-size: 14px; padding: 10px 12px; border-radius: 8px; background: var(--warn-soft); color: var(--warn); }
+.btn { font: inherit; font-weight: 700; font-size: 16px; border-radius: 10px; padding: 12px 16px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; text-align: center; }
+.btn.primario { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.peligro { color: var(--bad); }
+.btn.chico { font-size: 14px; padding: 7px 10px; border-radius: 8px; }
+.btn[disabled] { opacity: 0.5; cursor: default; }
+.fila-botones { display: flex; gap: 10px; flex-wrap: wrap; }
+.fila-botones > * { flex: 1 1 180px; }
+.captura { display: grid; gap: 10px; }
+.captura .grande { font-size: 18px; padding: 18px 16px; }
+.pasos { margin: 0; padding-left: 20px; color: var(--muted); font-size: 14px; display: grid; gap: 2px; }
+.tarjeta { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: grid; gap: 12px; min-width: 0; }
+.etiqueta { font-size: 12px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
+.ejemplo-cinta { font-size: 13px; font-weight: 700; color: var(--warn); background: var(--warn-soft); border-radius: 6px; padding: 6px 10px; }
+.foto { width: 100%; border-radius: 8px; background: var(--sunk); display: block; touch-action: manipulation; cursor: crosshair; }
+.ayuda { font-size: 13px; color: var(--muted); }
+.resumen { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; align-items: center; }
+.nota-grande { font-family: var(--mono); font-size: 44px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+.chip { display: inline-block; font-size: 13px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: var(--sunk); color: var(--ink); }
+.chip.superior, .chip.alto { background: var(--ok-soft); color: var(--ok); }
+.chip.basico { background: var(--warn-soft); color: var(--warn); }
+.chip.bajo { background: var(--bad-soft); color: var(--bad); }
+.estudiante { display: grid; grid-template-columns: 110px 1fr; gap: 10px; align-items: end; }
+.estudiante .nombre { font-weight: 700; min-height: 1.4em; padding-bottom: 8px; overflow-wrap: anywhere; }
+.rejilla { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 6px; }
+.celda { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 4px 0 6px; display: grid; justify-items: center; gap: 0; cursor: pointer; font: inherit; color: var(--ink); }
+.celda .n { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.celda .l { font-family: var(--mono); font-size: 20px; font-weight: 600; line-height: 1.1; }
+.celda .k { font-size: 10px; color: var(--muted); font-family: var(--mono); min-height: 1.2em; }
+.celda.bien { background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+.celda.bien .l { color: var(--ok); }
+.celda.mal { background: var(--bad-soft); border-color: color-mix(in srgb, var(--bad) 40%, transparent); }
+.celda.mal .l { color: var(--bad); }
+.celda.vacia .l, .celda.multiple .l { color: var(--warn); }
+.celda.vacia, .celda.multiple { background: var(--warn-soft); }
+.alertas { display: grid; gap: 6px; }
+.alerta { font-size: 14px; padding: 8px 10px; border-radius: 8px; background: var(--warn-soft); color: var(--warn); }
+.alerta.error { background: var(--bad-soft); color: var(--bad); }
+.tabla-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; font-variant-numeric: tabular-nums; }
+th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); background: var(--sunk); position: sticky; top: 0; }
+tr:last-child td { border-bottom: none; }
+td.resp { font-family: var(--mono); font-size: 13px; letter-spacing: 0.04em; }
+td.resp .x { color: var(--bad); font-weight: 600; }
+td.num { text-align: right; }
+.cifras { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px; }
+.cifra { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px; }
+.cifra b { display: block; font-family: var(--mono); font-size: 26px; font-variant-numeric: tabular-nums; }
+.cifra span { font-size: 13px; color: var(--muted); }
+.preg { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px; display: grid; gap: 8px; }
+.preg summary { cursor: pointer; list-style: none; display: grid; grid-template-columns: 52px 1fr auto; gap: 10px; align-items: center; }
+.preg summary::-webkit-details-marker { display: none; }
+.preg .pn { font-family: var(--mono); font-weight: 600; }
+.preg .pt { min-width: 0; overflow-wrap: anywhere; }
+.preg .pp { font-family: var(--mono); font-weight: 600; font-variant-numeric: tabular-nums; }
+.barra-pct { height: 8px; border-radius: 4px; background: var(--sunk); overflow: hidden; grid-column: 1 / -1; }
+.barra-pct i { display: block; height: 100%; background: var(--accent); }
+.opciones { display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); gap: 6px; }
+.op { font-size: 13px; border-radius: 6px; padding: 5px 8px; background: var(--sunk); display: flex; justify-content: space-between; gap: 6px; font-variant-numeric: tabular-nums; }
+.op.correcta { background: var(--ok-soft); color: var(--ok); font-weight: 700; }
+.op.fuerte { outline: 2px solid var(--bad); outline-offset: -2px; }
+.explica { font-size: 14px; color: var(--muted); }
+.campo { display: grid; gap: 4px; }
+.campo > span { font-size: 13px; font-weight: 700; }
+.grupo-ed { border: 1px solid var(--line); border-radius: var(--r); padding: 12px; display: grid; gap: 10px; background: var(--surface); }
+.radios { display: grid; gap: 6px; }
+.radios label { display: flex; gap: 8px; align-items: flex-start; font-size: 15px; }
+.umbral { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-weight: 700; font-size: 15px; z-index: 20; max-width: calc(100% - 32px); }
+.vacio { text-align: center; color: var(--muted); padding: 28px 12px; border: 1px dashed var(--line); border-radius: var(--r); }
+.procesando { display: flex; align-items: center; gap: 10px; color: var(--muted); }
+.giro { width: 18px; height: 18px; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: g 0.8s linear infinite; }
+@keyframes g { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .giro { animation: none; } }
+@media (max-width: 480px) {
+  .rejilla { gap: 4px; }
+  .celda .l { font-size: 17px; }
+  .nota-grande { font-size: 38px; }
+}
+.escaner { position: fixed; inset: 0; z-index: 30; background: #000; display: flex; flex-direction: column; }
+.escaner .marco { position: relative; flex: 1; min-height: 0; }
+.escaner video, .escaner canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.escaner .esc-barra { background: #000; color: #fff; padding: 12px max(16px, env(safe-area-inset-right, 0px)) calc(14px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); display: grid; gap: 10px; }
+.escaner .esc-estado { font-size: 16px; font-weight: 700; text-align: center; min-height: 1.4em; }
+.escaner .esc-estado.ok { color: #6fe3a1; }
+.escaner .btn { background: #1d2733; color: #fff; border-color: #33404d; }
+.escaner .btn.primario { background: #2f74d0; border-color: #2f74d0; }
+.instalar { background: var(--sunk); border-radius: var(--r); padding: 12px 14px; font-size: 15px; }
+input[type="file"] { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+</style>
+
+<header class="barra">
+  <div class="wrap">
+    <div class="titulo">
+      <h1>Calificador · Matemáticas 5°</h1>
+      <span class="guardado" id="estadoGuardado">Cargando…</span>
+    </div>
+    <div class="selectores">
+      <label for="selExamen">Examen<select id="selExamen"></select></label>
+      <label for="selGrupo">Grupo<select id="selGrupo"></select></label>
+    </div>
+    <nav class="pestanas" role="tablist">
+      <button id="tab-calificar" role="tab" aria-selected="true" data-tab="calificar">Calificar</button>
+      <button id="tab-resultados" role="tab" aria-selected="false" data-tab="resultados">Resultados</button>
+      <button id="tab-analisis" role="tab" aria-selected="false" data-tab="analisis">Análisis</button>
+      <button id="tab-ajustes" role="tab" aria-selected="false" data-tab="ajustes">Ajustes</button>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+  <main id="vista"></main>
+</div>
+<div class="escaner" id="escaner" hidden>
+  <div class="marco"><video id="video" playsinline muted autoplay></video><canvas id="guia"></canvas></div>
+  <div class="esc-barra">
+    <div class="esc-estado" id="escEstado">Apunta a una tirilla.</div>
+    <div class="fila-botones">
+      <button class="btn primario" id="escLeer">Leer ahora</button>
+      <button class="btn" id="escCerrar">Cerrar</button>
+    </div>
+  </div>
+</div>
+<input type="file" id="inCamara" accept="image/*" capture="environment">
+<input type="file" id="inListas" accept=".xlsx,.xls,.json,.csv" multiple>
+<input type="file" id="inRespaldo" accept=".json,application/json">
+<input type="file" id="inGaleria" accept="image/*">
+<div class="toast" id="toast" hidden></div>
+
+<script>
+// Lector de burbujas para la hoja de respuestas de la I.E. Antonia Santos.
+// Plantilla en mm (origen: centro del cuadro superior izquierdo, y hacia abajo).
+// Debe coincidir con hoja_omr.py.
+const OMR = (() => {
+  const T = {
+    fid: [[0, 0], [180, 0], [180, 46], [0, 46]],
+    aspect: 180 / 46,
+    orient: [13, 0],
+    r: 2.2,
+    dec: { y: 7, x0: 40, dx: 6, n: 5 },
+    uni: { y: 7, x0: 86, dx: 6, n: 10 },
+    q: { x0: 14, dx: 8.2, n: 20, rows: [20, 26, 32, 38] },
+  };
+  const LET = ['A', 'B', 'C', 'D'];
+
+  // Lista de burbujas con su posición en mm
+  function burbujas() {
+    const b = [];
+    for (let i = 0; i < T.dec.n; i++) b.push({ tipo: 'dec', v: i, x: T.dec.x0 + i * T.dec.dx, y: T.dec.y });
+    for (let i = 0; i < T.uni.n; i++) b.push({ tipo: 'uni', v: i, x: T.uni.x0 + i * T.uni.dx, y: T.uni.y });
+    for (let q = 0; q < T.q.n; q++) for (let c = 0; c < 4; c++)
+      b.push({ tipo: 'q', q, c, x: T.q.x0 + q * T.q.dx, y: T.q.rows[c] });
+    return b;
+  }
+
+  // ---------- Umbral adaptativo con imagen integral ----------
+  function binarizar(g, w, h) {
+    const W1 = w + 1;
+    const I = new Float64Array(W1 * (h + 1));
+    for (let y = 0; y < h; y++) {
+      let fila = 0;
+      for (let x = 0; x < w; x++) {
+        fila += g[y * w + x];
+        I[(y + 1) * W1 + x + 1] = I[y * W1 + x + 1] + fila;
+      }
+    }
+    const s = Math.max(15, Math.round(Math.max(w, h) / 24)) | 1;
+    const r = s >> 1;
+    const bin = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) {
+      const y0 = Math.max(0, y - r), y1 = Math.min(h, y + r + 1);
+      for (let x = 0; x < w; x++) {
+        const x0 = Math.max(0, x - r), x1 = Math.min(w, x + r + 1);
+        const n = (y1 - y0) * (x1 - x0);
+        const sum = I[y1 * W1 + x1] - I[y0 * W1 + x1] - I[y1 * W1 + x0] + I[y0 * W1 + x0];
+        const v = g[y * w + x];
+        bin[y * w + x] = (v * n < sum * 0.86 && v < 200) ? 1 : 0;
+      }
+    }
+    return bin;
+  }
+
+  // ---------- Componentes conexas (manchas oscuras) ----------
+  function componentes(bin, w, h) {
+    const lab = new Int32Array(w * h);
+    const pila = new Int32Array(w * h);
+    const comps = [];
+    let id = 0;
+    for (let i = 0; i < w * h; i++) {
+      if (!bin[i] || lab[i]) continue;
+      id++;
+      let top = 0; pila[top++] = i; lab[i] = id;
+      let area = 0, sx = 0, sy = 0, sxx = 0, syy = 0, minx = w, maxx = 0, miny = h, maxy = 0;
+      while (top) {
+        const p = pila[--top];
+        const x = p % w, y = (p / w) | 0;
+        area++; sx += x; sy += y; sxx += x * x; syy += y * y;
+        if (x < minx) minx = x; if (x > maxx) maxx = x; if (y < miny) miny = y; if (y > maxy) maxy = y;
+        if (x > 0 && bin[p - 1] && !lab[p - 1]) { lab[p - 1] = id; pila[top++] = p - 1; }
+        if (x < w - 1 && bin[p + 1] && !lab[p + 1]) { lab[p + 1] = id; pila[top++] = p + 1; }
+        if (y > 0 && bin[p - w] && !lab[p - w]) { lab[p - w] = id; pila[top++] = p - w; }
+        if (y < h - 1 && bin[p + w] && !lab[p + w]) { lab[p + w] = id; pila[top++] = p + w; }
+      }
+      if (area < 30) continue;
+      const cx = sx / area, cy = sy / area;
+      const m = (sxx / area - cx * cx + syy / area - cy * cy) / area; // momento normalizado
+      comps.push({ area, cx, cy, minx, maxx, miny, maxy, m });
+    }
+    return comps;
+  }
+
+  // ---------- Homografía (4 puntos) ----------
+  function homografia(src, dst) {
+    const A = [], b = [];
+    for (let i = 0; i < 4; i++) {
+      const [x, y] = src[i], [u, v] = dst[i];
+      A.push([x, y, 1, 0, 0, 0, -u * x, -u * y]); b.push(u);
+      A.push([0, 0, 0, x, y, 1, -v * x, -v * y]); b.push(v);
+    }
+    const n = 8;
+    for (let c = 0; c < n; c++) {
+      let p = c;
+      for (let r = c + 1; r < n; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r;
+      [A[c], A[p]] = [A[p], A[c]]; [b[c], b[p]] = [b[p], b[c]];
+      if (Math.abs(A[c][c]) < 1e-12) return null;
+      for (let r = 0; r < n; r++) {
+        if (r === c) continue;
+        const f = A[r][c] / A[c][c];
+        for (let k = c; k < n; k++) A[r][k] -= f * A[c][k];
+        b[r] -= f * b[c];
+      }
+    }
+    const h = b.map((v, i) => v / A[i][i]);
+    return [h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7], 1];
+  }
+  function aplicar(H, x, y) {
+    const d = H[6] * x + H[7] * y + H[8];
+    return [(H[0] * x + H[1] * y + H[2]) / d, (H[3] * x + H[4] * y + H[5]) / d];
+  }
+
+  // Fracción de píxeles oscuros en un disco (en mm) de la plantilla
+  function oscuridad(bin, w, h, H, xm, ym, rm) {
+    let n = 0, o = 0;
+    const K = 5;
+    for (let i = -K; i <= K; i++) for (let j = -K; j <= K; j++) {
+      if (i * i + j * j > K * K) continue;
+      const [u, v] = aplicar(H, xm + (rm * i) / K, ym + (rm * j) / K);
+      const px = Math.round(u), py = Math.round(v);
+      if (px < 0 || py < 0 || px >= w || py >= h) continue;
+      n++; o += bin[py * w + px];
+    }
+    return n ? o / n : 0;
+  }
+
+  const dist = (a, b) => Math.hypot(a.cx - b.cx, a.cy - b.cy);
+
+  // ---------- Buscar los cuatro cuadros de esquina ----------
+  // Puntos de control de la plantilla para comprobar un candidato:
+  // anillos de las burbujas (deben verse oscuros) y huecos entre ellas (claros).
+  const ANILLOS = [], HUECOS = [];
+  (function () {
+    for (let q = 0; q < T.q.n; q += 2) for (let c = 0; c < 4; c++) {
+      const x = T.q.x0 + q * T.q.dx, y = T.q.rows[c];
+      for (let a = 0; a < 8; a++) ANILLOS.push([x + T.r * Math.cos(a * Math.PI / 4), y + T.r * Math.sin(a * Math.PI / 4)]);
+    }
+    for (let q = 0; q < T.q.n - 1; q++) {
+      if (q === 9) continue;
+      const x = T.q.x0 + q * T.q.dx + T.q.dx / 2;
+      for (const y of [23, 29, 35]) HUECOS.push([x, y]);
+    }
+    for (const x of [30, 60, 90, 120, 150]) HUECOS.push([x, 43.5]);
+  })();
+  function punto(bin, w, h, H, x, y) {
+    const [u, v] = aplicar(H, x, y);
+    const px = Math.round(u), py = Math.round(v);
+    if (px < 0 || py < 0 || px >= w || py >= h) return 0.5;
+    return bin[py * w + px];
+  }
+  function ajuste(bin, w, h, H) {
+    // promedio en una pequeña cruz alrededor de cada punto (tolera desenfoque)
+    let an = 0;
+    for (const [x, y] of ANILLOS) an += Math.max(punto(bin, w, h, H, x, y), punto(bin, w, h, H, x * 1.002, y), punto(bin, w, h, H, x, y + 0.15));
+    an /= ANILLOS.length;
+    let hu = 0;
+    for (const [x, y] of HUECOS) hu += punto(bin, w, h, H, x, y);
+    hu /= HUECOS.length;
+    const marca = oscuridad(bin, w, h, H, T.orient[0], T.orient[1], 1.2);
+    const opuesta = oscuridad(bin, w, h, H, 180 - T.orient[0], 46 - T.orient[1], 1.2);
+    return { valor: marca - opuesta + an - 2 * hu, marca, an, hu };
+  }
+
+  function buscarEsquinas(comps, bin, w, h) {
+    const lado = Math.max(w, h);
+    const cand = comps.filter((c) => {
+      const bw = c.maxx - c.minx + 1, bh = c.maxy - c.miny + 1;
+      if (bw < 8 || bh < 8 || bw > lado / 5 || bh > lado / 5) return false;
+      if (c.minx === 0 || c.miny === 0 || c.maxx === w - 1 || c.maxy === h - 1) return false;
+      const asp = bw / bh;
+      return asp > 0.4 && asp < 2.5 && c.m > 0.145 && c.m < 0.21 && c.area / (bw * bh) > 0.45;
+    }).sort((a, b) => b.area - a.area).slice(0, 16);
+
+    let mejor = null;
+    const n = cand.length;
+    for (let a = 0; a < n; a++) for (let b = a + 1; b < n; b++) for (let c = b + 1; c < n; c++) for (let d = c + 1; d < n; d++) {
+      const g = [cand[a], cand[b], cand[c], cand[d]];
+      const areas = g.map((p) => p.area);
+      if (Math.max(...areas) / Math.min(...areas) > 3.5) continue;
+      const mx = (g[0].cx + g[1].cx + g[2].cx + g[3].cx) / 4, my = (g[0].cy + g[1].cy + g[2].cy + g[3].cy) / 4;
+      g.sort((p, q) => Math.atan2(p.cy - my, p.cx - mx) - Math.atan2(q.cy - my, q.cx - mx));
+      let conv = true, signo = 0;
+      for (let i = 0; i < 4; i++) {
+        const p = g[i], q = g[(i + 1) % 4], r = g[(i + 2) % 4];
+        const s = Math.sign((q.cx - p.cx) * (r.cy - q.cy) - (q.cy - p.cy) * (r.cx - q.cx));
+        if (!signo) signo = s; else if (s !== signo) { conv = false; break; }
+      }
+      if (!conv) continue;
+      const L = [dist(g[0], g[1]), dist(g[1], g[2]), dist(g[2], g[3]), dist(g[3], g[0])];
+      const r02 = L[0] / L[2], r13 = L[1] / L[3];
+      if (r02 < 0.5 || r02 > 2 || r13 < 0.5 || r13 > 2) continue;
+      const largo = L[0] + L[2] > L[1] + L[3];
+      const asp = largo ? (L[0] + L[2]) / (L[1] + L[3]) : (L[1] + L[3]) / (L[0] + L[2]);
+      if (asp < 2.3 || asp > 6.5) continue;
+      const ancho = largo ? (L[0] + L[2]) / 2 : (L[1] + L[3]) / 2;
+      const ladoMed = Math.sqrt(areas.reduce((s, v) => s + v, 0) / 4);
+      const ladoEsp = ancho * 7 / 180;
+      if (ladoMed < ladoEsp * 0.5 || ladoMed > ladoEsp * 1.8) continue;
+      const ordenes = largo ? [[0, 1, 2, 3], [2, 3, 0, 1]] : [[1, 2, 3, 0], [3, 0, 1, 2]];
+      for (const o of ordenes) {
+        const dst = o.map((i) => [g[i].cx, g[i].cy]);
+        const H = homografia(T.fid, dst);
+        if (!H) continue;
+        const f = ajuste(bin, w, h, H);
+        if (!mejor || f.valor > mejor.f.valor) mejor = { H, dst, f };
+      }
+    }
+    return mejor;
+  }
+
+  // ---------- Análisis completo ----------
+  function analizar(g, w, h) {
+    const bin = binarizar(g, w, h);
+    const comps = componentes(bin, w, h);
+    const elegido = buscarEsquinas(comps, bin, w, h);
+    if (!elegido) return { ok: false, error: 'No encontré los cuatro cuadros negros de la hoja. Toma la foto de una sola tirilla completa, con buena luz y sin cortar las esquinas.' };
+    if (elegido.f.marca < 0.5 || elegido.f.an < 0.35 || elegido.f.hu > 0.3) return { ok: false, error: 'La hoja no se ve con claridad. Repite la foto de una sola tirilla, de frente, con buena luz y sin sombras.' };
+    const H = elegido.H;
+    const lista = burbujas();
+    for (const b of lista) {
+      b.s = oscuridad(bin, w, h, H, b.x, b.y, 1.5);
+      [b.u, b.v] = aplicar(H, b.x, b.y);
+    }
+    // Escala aproximada (píxeles por mm) para dibujar
+    const [ax, ay] = aplicar(H, 0, 23), [bx, by] = aplicar(H, 180, 23);
+    const pxmm = Math.hypot(bx - ax, by - ay) / 180;
+    const MARCA = 0.42, DIF = 0.25;
+    const decidir = (sc) => {
+      const idx = sc.map((s, i) => [s, i]).sort((a, b) => b[0] - a[0]);
+      if (idx[0][0] < MARCA) return { v: null, estado: 'vacia' };
+      if (idx[1][0] >= MARCA && idx[0][0] - idx[1][0] < DIF) return { v: null, estado: 'multiple' };
+      return { v: idx[0][1], estado: 'ok' };
+    };
+    const resp = [];
+    for (let k = 0; k < T.q.n; k++) {
+      const sc = LET.map((_, c) => lista.find((b) => b.tipo === 'q' && b.q === k && b.c === c).s);
+      const d = decidir(sc);
+      resp.push(d.estado === 'ok' ? LET[d.v] : d.estado === 'multiple' ? '*' : '-');
+    }
+    const dec = decidir(lista.filter((b) => b.tipo === 'dec').map((b) => b.s));
+    const uni = decidir(lista.filter((b) => b.tipo === 'uni').map((b) => b.s));
+    let numero = null;
+    if (uni.estado === 'ok' && dec.estado !== 'multiple') numero = (dec.estado === 'ok' ? dec.v * 10 : 0) + uni.v;
+    return {
+      ok: true, respuestas: resp.join(''), numero, burbujas: lista, pxmm,
+      esquinas: elegido.dst, estadoNumero: { dec: dec.estado, uni: uni.estado },
+    };
+  }
+
+  // Imagen (canvas) -> gris, reducida a un lado máximo
+  function grisDeCanvas(ctx, w, h) {
+    const d = ctx.getImageData(0, 0, w, h).data;
+    const g = new Uint8ClampedArray(w * h);
+    for (let i = 0, j = 0; i < g.length; i++, j += 4) g[i] = (d[j] * 77 + d[j + 1] * 150 + d[j + 2] * 29) >> 8;
+    return g;
+  }
+
+  return { T, LET, analizar, grisDeCanvas, aplicar, burbujas };
+})();
+if (typeof module !== 'undefined') module.exports = OMR;
+
+</script>
+<script>
+const JUST = [{"n": 1, "clave": "B", "comp": "Comunicación", "dba": "DBA 1", "afirmacion": "traduce la lectura verbal de una fracción a su escritura numérica.", "explicacion": "«Cinco» es el numerador y «séptimos» el denominador. A invierte los términos; C toma solo la palabra «séptimos»; D suma los dos números que aparecen en la frase.", "tema": "Escritura de fracciones"}, {"n": 2, "clave": "D", "comp": "Comunicación", "dba": "DBA 1", "afirmacion": "representa la fracción de un conjunto discreto.", "explicacion": "Hay 12 fichas y 8 son blancas: 8/12. A es la fracción de fichas rojas (dato presente pero no pedido). B y C comparan blancas con rojas (parte-parte) en lugar de parte-todo.", "tema": "Contexto discreto (fichas)"}, {"n": 3, "clave": "D", "comp": "Resolución de problemas", "dba": "DBA 1", "afirmacion": "interpreta la fracción como cociente en una situación de reparto.", "explicacion": "3 bollos entre 4 niños: 3 ÷ 4 = 3/4. A invierte dividendo y divisor; B y C toman una sola de las cantidades como si fuera el reparto de un solo bollo.", "tema": "Fracción como cociente"}, {"n": 4, "clave": "C", "comp": "Razonamiento", "dba": "DBA 1", "afirmacion": "reconoce cuándo una fracción equivale a una división exacta.", "explicacion": "21 ÷ 7 = 3, división exacta. A (3,75), B (3,33…) y D (4,5) no son exactas; el estudiante que elige por «números grandes» o por ser impropia cae en A o B.", "tema": "División exacta"}, {"n": 5, "clave": "A", "comp": "Resolución de problemas", "dba": "DBA 3", "afirmacion": "reconoce fracciones equivalentes en un contexto de medida.", "explicacion": "3/4 = (3×2)/(4×2) = 6/8. B multiplica solo el denominador; C suma 1 a cada término; D duplica el numerador pero invierte la relación (fracción mayor que 1).", "tema": "Fracciones equivalentes"}, {"n": 6, "clave": "B", "comp": "Razonamiento", "dba": "DBA 3", "afirmacion": "valida la equivalencia de fracciones con los productos cruzados.", "explicacion": "2 × 15 = 5 × 6 = 30. A multiplica «en línea» (numerador con numerador) y no en cruz. C compara el tamaño de los números, no el valor de la fracción. D da un argumento verdadero pero que no prueba la equivalencia.", "tema": "Productos cruzados"}, {"n": 7, "clave": "C", "comp": "Razonamiento", "dba": "DBA 3", "afirmacion": "compara fracciones de igual numerador.", "explicacion": "Con igual numerador, a menor denominador corresponden partes más grandes: 1/3 > 1/4 > 1/5. A aplica la regla de los números naturales («5 es mayor»). B elige el valor intermedio. D atiende solo al numerador (un pedazo).", "tema": "Orden: igual numerador"}, {"n": 8, "clave": "B", "comp": "Comunicación", "dba": "DBA 3", "afirmacion": "ordena fracciones homogéneas.", "explicacion": "Con igual denominador, es mayor la de mayor numerador: 7/9 > 5/9 > 2/9 (Mateo, Andrés, Camila). A ordena de menor a mayor (lectura invertida de la consigna). C y D desordenan a uno de los ciclistas.", "tema": "Orden: homogéneas (ciclistas)"}, {"n": 9, "clave": "A", "comp": "Razonamiento", "dba": "DBA 3", "afirmacion": "compara fracciones heterogéneas mediante el m.c.m. de los denominadores.", "explicacion": "m.c.m.(3,4) = 12: 8/12 < 9/12. B amplifica mal 3/4. C usa el razonamiento de «lo que falta» sin tener en cuenta el tamaño de las partes. D llega a la respuesta correcta con un argumento falso (comparar los números por separado).", "tema": "Orden: heterogéneas"}, {"n": 10, "clave": "C", "comp": "Resolución de problemas", "dba": "DBA 1", "afirmacion": "resuelve situaciones de adición con fracciones homogéneas.", "explicacion": "Con igual denominador se suman los numeradores y se conserva el denominador: 2/7 + 3/7 = 5/7. A suma también los denominadores (error más frecuente); B multiplica los términos; D resta en lugar de sumar (no interpreta «en todo el día» como reunir).", "tema": "Suma, igual denominador"}, {"n": 11, "clave": "A", "comp": "Resolución de problemas", "dba": "DBA 1", "afirmacion": "resuelve situaciones de sustracción con fracciones homogéneas.", "explicacion": "11/12 - 5/12 = 6/12 (que se puede simplificar a 1/2). B suma en lugar de restar; C resta también los denominadores (12 - 12 = 0); D es la cinta usada, un dato del enunciado que no responde la pregunta.", "tema": "Resta, igual denominador"}, {"n": 12, "clave": "C", "comp": "Resolución de problemas", "dba": "DBA 1", "afirmacion": "resuelve situaciones de adición con fracciones heterogéneas usando el m.c.m.", "explicacion": "m.c.m.(3,4) = 12: 4/12 + 3/12 = 7/12. A suma numeradores y denominadores; B multiplica las fracciones; D halla el denominador común pero no amplifica los numeradores (1 + 1).", "tema": "Suma, distinto denominador"}, {"n": 13, "clave": "D", "comp": "Resolución de problemas", "dba": "DBA 1", "afirmacion": "resuelve situaciones de sustracción con fracciones heterogéneas.", "explicacion": "1/2 = 2/4, entonces 3/4 - 2/4 = 1/4. A resta término a término (3-1 y 4-2); B suma término a término; C escribe 1/2 como 1/4 al llevarla a cuartos y resta 3/4 - 1/4.", "tema": "Resta, distinto denominador"}, {"n": 14, "clave": "A", "comp": "Resolución de problemas", "dba": "DBA 1", "afirmacion": "usa la fracción como operador sobre una cantidad.", "explicacion": "32 ÷ 8 = 4; 4 × 3 = 12. B se queda en la división (1/8 de 32). C son las piezas que no son muelas. D multiplica 32 × 3 sin dividir.", "tema": "Operador (muelas)"}, {"n": 15, "clave": "C", "comp": "Razonamiento", "dba": "DBA 1", "afirmacion": "resuelve un problema inverso con fracciones de una cantidad.", "explicacion": "6 kg es la mitad de la cuarta parte: la cuarta parte es 6 × 2 = 12 y el peso es 12 × 4 = 48 kg. A deshace solo la mitad; B solo la cuarta parte; D divide en lugar de multiplicar.", "tema": "Problema inverso (marranito)"}, {"n": 16, "clave": "A", "comp": "Comunicación", "dba": "DBA 1", "afirmacion": "representa con una fracción la parte de la unidad en un contexto de medida.", "explicacion": "El tramo del día se hace en 5 horas iguales; en 3 horas se pavimentan 3/5. B invierte los términos; C es lo que falta; D usa el 3 como denominador.", "tema": "Fracción en medida"}, {"n": 17, "clave": "D", "comp": "Comunicación", "dba": "DBA 3", "afirmacion": "lee una fracción mayor que la unidad en la recta numérica.", "explicacion": "Cada unidad tiene 5 partes; P está en la octava marca: 8/5. A cuenta las partes desde 1 y olvida la primera unidad; B usa como denominador los espacios hasta 2; C invierte los términos.", "tema": "Recta: fracción mayor que 1"}, {"n": 18, "clave": "B", "comp": "Razonamiento", "dba": "DBA 3", "afirmacion": "interpreta la parte entera de un número mixto en el contexto.", "explicacion": "En 1 3/5, el 1 es una unidad completa, que en la situación es el tramo de un día. A y D confunden la unidad con una de sus partes; C toma un dato que no aparece en la recta.", "tema": "Parte entera de un mixto"}, {"n": 19, "clave": "B", "comp": "Comunicación", "dba": "DBA 3", "afirmacion": "representa una cantidad con un número mixto.", "explicacion": "4 libras enteras y media libra: 4 1/2. A cuenta el medio queso como uno entero; C pone en el denominador el número de piezas (5); D confunde medio con un cuarto.", "tema": "Número mixto (quesos)"}, {"n": 20, "clave": "D", "comp": "Resolución de problemas", "dba": "DBA 3", "afirmacion": "expresa una cantidad mixta como fracción impropia.", "explicacion": "3 1/2 = (3 × 2 + 1)/2 = 7/2. A pone los 3 litros como numerador sin convertirlos; B cuenta 4 botellas como 4 medios; C yuxtapone las cifras (31).", "tema": "Mixto a impropia (litros)"}];
+const CLAVE_P3 = 'BDDCABCBACACDACADBBD';
+const LETRAS = ['A', 'B', 'C', 'D'];
+
+// ---------------------------------------------------------------- utilidades
+const $ = (s, el = document) => el.querySelector(s);
+const h = (tag, attrs = {}, ...hijos) => {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === 'class') el.className = v;
+    else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+    else if (k === 'text') el.textContent = v;
+    else el.setAttribute(k, v === true ? '' : v);
+  }
+  for (const c of hijos.flat()) if (c != null && c !== false) el.append(c.nodeType ? c : document.createTextNode(String(c)));
+  return el;
+};
+const coma = (x, d = 1) => (x == null || isNaN(x)) ? '—' : x.toFixed(d).replace('.', ',');
+const idSeguro = (s) => String(s).replace(/[^A-Za-z0-9_\-]/g, '_').slice(0, 60);
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.hidden = false;
+  clearTimeout(toast._t); toast._t = setTimeout(() => { t.hidden = true; }, 2600);
+}
+
+// ---------------------------------------------------------------- almacenamiento
+const Almacen = {
+  modo: 'local',
+  async iniciar() {
+    try { if (navigator.storage && navigator.storage.persist) await navigator.storage.persist(); } catch (e) {}
+  },
+  async leer(id) {
+    try { const v = localStorage.getItem('calif:' + id); return v ? JSON.parse(v) : null; } catch (e) { return null; }
+  },
+  async escribir(id, data) {
+    try { localStorage.setItem('calif:' + id, JSON.stringify(data)); }
+    catch (e) { throw { code: 'local', message: 'No se pudo guardar en este teléfono.' }; }
+  },
+  todo() {
+    const o = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('calif:')) { try { o[k.slice(6)] = JSON.parse(localStorage.getItem(k)); } catch (e) {} }
+    }
+    return o;
+  },
+  restaurar(obj) { for (const [k, v] of Object.entries(obj)) localStorage.setItem('calif:' + k, JSON.stringify(v)); },
+};
+// Guardar o compartir un archivo (en iPhone abre el menú Compartir)
+async function guardarArchivo(nombre, contenido, tipo) {
+  const blob = new Blob([contenido], { type: tipo });
+  try {
+    const file = new File([blob], nombre, { type: tipo });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: nombre }); return; }
+  } catch (e) { if (e && e.name === 'AbortError') return; }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = nombre;
+  document.body.append(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+}
+
+// ---------------------------------------------------------------- estado
+const CONFIG_INICIAL = {
+  version: 1,
+  examenes: [{ id: 'p3-2026', nombre: 'Acumulativa P3 · Fracciones', clave: CLAVE_P3, escala: 'proporcional' }],
+  activo: 'p3-2026',
+  grupos: [{ id: 'g1', nombre: 'Quinto · grupo 1', lista: [] }],
+  grupoActivo: 'g1',
+  desempeno: { basico: 3.0, alto: 4.0, superior: 4.6 },
+};
+const S = { config: null, res: {}, tab: 'calificar', actual: null, procesando: false, confirmar: null };
+
+const examen = () => S.config.examenes.find((e) => e.id === S.config.activo) || S.config.examenes[0];
+const grupo = () => S.config.grupos.find((g) => g.id === S.config.grupoActivo) || S.config.grupos[0];
+const docRes = (ex = examen(), gr = grupo()) => 'res_' + idSeguro(ex.id) + '_' + idSeguro(gr.id);
+const filas = () => (S.res[docRes()] && S.res[docRes()].filas) || {};
+const nombreDe = (n, gr = grupo()) => (n && gr.lista[n - 1]) ? gr.lista[n - 1] : '';
+
+function calificar(resp, ex = examen()) {
+  const clave = ex.clave || '';
+  const total = clave.length || 20;
+  let ac = 0;
+  for (let i = 0; i < total; i++) if (resp[i] && resp[i] === clave[i]) ac++;
+  const p = total ? ac / total : 0;
+  let nota = ex.escala === 'lineal' ? 1 + 4 * p : Math.max(1, 5 * p);
+  nota = Math.round(nota * 10 + 1e-9) / 10;
+  return { ac, total, nota };
+}
+function desempeno(nota) {
+  const d = S.config.desempeno;
+  if (nota >= d.superior) return ['Superior', 'superior'];
+  if (nota >= d.alto) return ['Alto', 'alto'];
+  if (nota >= d.basico) return ['Básico', 'basico'];
+  return ['Bajo', 'bajo'];
+}
+
+async function cargarResultados() {
+  const id = docRes();
+  if (!(id in S.res)) S.res[id] = (await Almacen.leer(id)) || { filas: {} };
+}
+async function guardarConfig() {
+  await Almacen.escribir('config', S.config);
+}
+
+// ---------------------------------------------------------------- encabezado
+function pintarSelectores() {
+  const se = $('#selExamen'), sg = $('#selGrupo');
+  se.replaceChildren(...S.config.examenes.map((e) => h('option', { value: e.id, selected: e.id === S.config.activo }, e.nombre)));
+  sg.replaceChildren(...S.config.grupos.map((g) => h('option', { value: g.id, selected: g.id === S.config.grupoActivo }, g.nombre)));
+  $('#estadoGuardado').textContent = 'Se guarda en este teléfono';
+}
+$('#selExamen').addEventListener('change', async (e) => { S.config.activo = e.target.value; S.actual = S.actual && S.actual.ejemplo ? S.actual : null; await cargarResultados(); guardarConfig().catch(() => {}); pintar(); });
+$('#selGrupo').addEventListener('change', async (e) => { S.config.grupoActivo = e.target.value; await cargarResultados(); guardarConfig().catch(() => {}); pintar(); });
+document.querySelectorAll('nav.pestanas button').forEach((b) => b.addEventListener('click', () => { S.tab = b.dataset.tab; pintar(); }));
+
+function pintar() {
+  pintarSelectores();
+  document.querySelectorAll('nav.pestanas button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === S.tab)));
+  const v = $('#vista');
+  const vistas = { calificar: vistaCalificar, resultados: vistaResultados, analisis: vistaAnalisis, ajustes: vistaAjustes };
+  v.replaceChildren(...[].concat(vistas[S.tab]()));
+}
+
+// ---------------------------------------------------------------- calificar
+function vistaCalificar() {
+  const ex = examen();
+  const out = [];
+  if (!/^[ABCD]{1,20}$/.test(ex.clave || '')) {
+    out.push(h('div', { class: 'aviso' }, 'Este examen no tiene clave completa. Escríbela en Ajustes antes de calificar.'));
+  }
+  out.push(h('section', { class: 'captura' },
+    h('button', { class: 'btn primario grande', id: 'btnEscanear', onclick: () => abrirEscaner() }, 'Escanear con la cámara'),
+    h('div', { class: 'fila-botones' },
+      h('button', { class: 'btn', id: 'btnFoto', onclick: () => $('#inCamara').click() }, 'Tomar foto'),
+      h('button', { class: 'btn', id: 'btnGaleria', onclick: () => $('#inGaleria').click() }, 'Elegir de la galería'),
+      h('button', { class: 'btn', id: 'btnEjemplo', onclick: () => cargarEjemplo() }, 'Ver hoja de ejemplo')),
+    h('ol', { class: 'pasos' },
+      h('li', {}, 'Recorta la tirilla y ponla sobre una mesa oscura.'),
+      h('li', {}, 'Apunta la cámara de frente: lee sola cuando ve los cuatro cuadros negros.'),
+      h('li', {}, 'Revisa las respuestas resaltadas y guarda.'))));
+  if (esIOS() && !enPantallaInicio()) out.unshift(h('div', { class: 'instalar' }, h('b', {}, 'Instálala en el iPhone: '), 'en Safari toca el botón Compartir y luego «Agregar a pantalla de inicio».'));
+  if (S.procesando) out.push(h('div', { class: 'tarjeta' }, h('div', { class: 'procesando' }, h('span', { class: 'giro' }), 'Leyendo la hoja…')));
+  else if (S.actual) out.push(tarjetaResultado());
+  const f = filas();
+  const recientes = Object.values(f).sort((a, b) => (b.t || 0) - (a.t || 0)).slice(0, 5);
+  if (recientes.length) {
+    out.push(h('section', { class: 'tarjeta' },
+      h('div', { class: 'etiqueta' }, 'Últimas guardadas en ' + grupo().nombre),
+      h('div', { class: 'tabla-wrap' }, h('table', {},
+        h('thead', {}, h('tr', {}, h('th', {}, 'N.°'), h('th', {}, 'Estudiante'), h('th', {}, 'Aciertos'), h('th', {}, 'Nota'))),
+        h('tbody', {}, recientes.map((r) => { const c = calificar(r.resp); return h('tr', {}, h('td', {}, String(r.n)), h('td', {}, nombreDe(r.n) || '—'), h('td', {}, c.ac + '/' + c.total), h('td', {}, coma(c.nota))); }))))));
+  }
+  return out;
+}
+
+function tarjetaResultado() {
+  const a = S.actual;
+  const ex = examen();
+  const c = calificar(a.resp, ex);
+  const [dTxt, dCls] = desempeno(c.nota);
+  const card = h('section', { class: 'tarjeta', id: 'resultado' });
+  if (a.ejemplo) card.append(h('div', { class: 'ejemplo-cinta' }, 'Hoja de ejemplo generada por la app. Así se ve una lectura; no se guarda.'));
+  // Foto con marcas
+  const cv = h('canvas', { class: 'foto', id: 'lienzo', 'aria-label': 'Foto de la hoja con las respuestas marcadas' });
+  card.append(cv, h('div', { class: 'ayuda' }, 'Verde: correcta · Rojo: incorrecta · Azul punteado: respuesta esperada. Toca una burbuja de la foto o una casilla de abajo para corregir la lectura.'));
+  requestAnimationFrame(() => dibujarLectura(cv));
+  // Estudiante
+  const inNum = h('input', { type: 'number', id: 'inNumero', min: '1', max: '49', inputmode: 'numeric', value: a.numero ?? '' });
+  const nom = h('div', { class: 'nombre', id: 'nombreEst' }, nombreDe(a.numero) || (a.numero ? 'Sin nombre en la lista' : ''));
+  inNum.addEventListener('input', () => {
+    const v = parseInt(inNum.value, 10);
+    a.numero = Number.isFinite(v) && v > 0 ? v : null;
+    nom.textContent = nombreDe(a.numero) || (a.numero ? 'Sin nombre en la lista' : '');
+    pintarAlertas(alertas);
+  });
+  card.append(h('div', { class: 'estudiante' }, h('label', { class: 'campo', for: 'inNumero' }, h('span', {}, 'N.° de lista'), inNum), nom));
+  // Nota
+  card.append(h('div', { class: 'resumen' },
+    h('div', { class: 'nota-grande', id: 'notaGrande' }, coma(c.nota)),
+    h('div', {}, h('div', { id: 'aciertos' }, c.ac + ' de ' + c.total + ' correctas'), h('span', { class: 'chip ' + dCls, id: 'chipDes' }, dTxt))));
+  // Rejilla de respuestas
+  const rej = h('div', { class: 'rejilla', id: 'rejilla' });
+  pintarRejilla(rej);
+  card.append(rej);
+  const alertas = h('div', { class: 'alertas', id: 'alertas' });
+  pintarAlertas(alertas);
+  card.append(alertas);
+  card.append(h('div', { class: 'fila-botones' },
+    h('button', { class: 'btn primario', id: 'btnGuardar', disabled: a.ejemplo, onclick: () => guardarActual(true) }, 'Guardar y escanear otra'),
+    h('button', { class: 'btn', id: 'btnGuardarSolo', disabled: a.ejemplo, onclick: () => guardarActual(false) }, 'Guardar'),
+    h('button', { class: 'btn peligro', onclick: () => { S.actual = null; pintar(); } }, 'Descartar')));
+  return card;
+}
+
+function refrescarNota() {
+  const c = calificar(S.actual.resp);
+  const [dTxt, dCls] = desempeno(c.nota);
+  $('#notaGrande').textContent = coma(c.nota);
+  $('#aciertos').textContent = c.ac + ' de ' + c.total + ' correctas';
+  const ch = $('#chipDes'); ch.textContent = dTxt; ch.className = 'chip ' + dCls;
+  pintarRejilla($('#rejilla'));
+  pintarAlertas($('#alertas'));
+  dibujarLectura($('#lienzo'));
+}
+function pintarRejilla(rej) {
+  const a = S.actual, clave = examen().clave || '';
+  const n = Math.max(clave.length, 20);
+  rej.replaceChildren();
+  for (let i = 0; i < Math.min(n, 20); i++) {
+    const r = a.resp[i] || '-';
+    const k = clave[i] || '';
+    let cls = 'celda';
+    if (r === '-') cls += ' vacia'; else if (r === '*') cls += ' multiple'; else if (k) cls += r === k ? ' bien' : ' mal';
+    rej.append(h('button', { class: cls, 'aria-label': 'Pregunta ' + (i + 1) + ': ' + (r === '-' ? 'sin marcar' : r === '*' ? 'doble marca' : r), onclick: () => {
+      const orden = ['A', 'B', 'C', 'D', '-'];
+      const j = orden.indexOf(r);
+      a.resp = a.resp.slice(0, i) + orden[(j + 1) % orden.length] + a.resp.slice(i + 1);
+      a.manual = true; refrescarNota();
+    } }, h('span', { class: 'n' }, String(i + 1)), h('span', { class: 'l' }, r === '-' ? '·' : r === '*' ? '2×' : r), h('span', { class: 'k' }, r !== k && k ? k : '')));
+  }
+}
+function pintarAlertas(cont) {
+  const a = S.actual; const msgs = [];
+  const dobles = [], vacias = [];
+  for (let i = 0; i < 20; i++) { if (a.resp[i] === '*') dobles.push(i + 1); if (a.resp[i] === '-') vacias.push(i + 1); }
+  if (dobles.length) msgs.push(['', 'Doble marca en ' + dobles.join(', ') + '. Cuenta como incorrecta; corrígela si se ve claro cuál quiso marcar.']);
+  if (vacias.length) msgs.push(['', 'Sin marcar: ' + vacias.join(', ') + '.']);
+  if (!a.numero) msgs.push(['error', 'No se pudo leer el número de lista. Escríbelo arriba para guardar.']);
+  else if (!a.ejemplo && filas()[a.numero]) { const prev = calificar(filas()[a.numero].resp); msgs.push(['', 'El N.° ' + a.numero + ' ya tiene nota ' + coma(prev.nota) + ' en este grupo. Si guardas, se reemplaza.']); }
+  cont.replaceChildren(...msgs.map(([c, m]) => h('div', { class: 'alerta ' + c }, m)));
+  const bloq = !a.numero || a.ejemplo;
+  const g1 = $('#btnGuardar'), g2 = $('#btnGuardarSolo');
+  if (g1) g1.disabled = bloq; if (g2) g2.disabled = bloq;
+}
+
+// Vista "enderezada" de la tirilla: se remuestrea la foto en coordenadas de la plantilla
+function rectificada(a) {
+  if (a.rect) return a.rect;
+  const r = a.lectura, src = a.canvas;
+  const sd = src.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, src.width, src.height).data;
+  const K = 5, X0 = -8, Y0 = -12, WM = 196, HM = 66;
+  const W = WM * K, H = HM * K;
+  const out = document.createElement('canvas'); out.width = W; out.height = H;
+  const oc = out.getContext('2d');
+  const od = oc.createImageData(W, H);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const [u, v] = OMR.aplicar(r.H, X0 + x / K, Y0 + y / K);
+    const px = Math.round(u), py = Math.round(v), o = (y * W + x) * 4;
+    if (px < 0 || py < 0 || px >= src.width || py >= src.height) { od.data[o] = od.data[o + 1] = od.data[o + 2] = 120; }
+    else { const i = (py * src.width + px) * 4; od.data[o] = sd[i]; od.data[o + 1] = sd[i + 1]; od.data[o + 2] = sd[i + 2]; }
+    od.data[o + 3] = 255;
+  }
+  oc.putImageData(od, 0, 0);
+  a.rect = { cv: out, K, X0, Y0, WM, HM };
+  return a.rect;
+}
+function dibujarLectura(cv) {
+  const a = S.actual; if (!a || !cv) return;
+  const R = rectificada(a);
+  const clave = examen().clave || '';
+  const anchoCss = cv.clientWidth || 600;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  cv.width = Math.round(anchoCss * dpr);
+  cv.height = Math.round(cv.width * R.HM / R.WM);
+  const ctx = cv.getContext('2d');
+  ctx.drawImage(R.cv, 0, 0, cv.width, cv.height);
+  const s = cv.width / R.WM; // px por mm en pantalla
+  const X = (x) => (x - R.X0) * s, Y = (y) => (y - R.Y0) * s;
+  const radio = 3.0 * s, lw = Math.max(2, 0.75 * s);
+  const anillo = (b, color, punteado) => {
+    ctx.beginPath(); ctx.arc(X(b.x), Y(b.y), radio, 0, Math.PI * 2);
+    ctx.setLineDash(punteado ? [lw * 1.6, lw * 1.2] : []); ctx.lineWidth = lw; ctx.strokeStyle = color; ctx.stroke();
+  };
+  for (const b of a.lectura.burbujas) {
+    if (b.tipo === 'q') {
+      const marcada = a.resp[b.q] === LETRAS[b.c];
+      const esClave = clave[b.q] === LETRAS[b.c];
+      if (marcada) anillo(b, esClave ? '#1f9d55' : '#d0392b', false);
+      else if (esClave) anillo(b, '#2f74d0', true);
+    } else if (a.numero != null) {
+      const d = Math.floor(a.numero / 10), u = a.numero % 10;
+      if ((b.tipo === 'dec' && b.v === d) || (b.tipo === 'uni' && b.v === u)) anillo(b, '#2f74d0', false);
+    }
+  }
+  ctx.setLineDash([]);
+  cv.onclick = (ev) => {
+    const rect = cv.getBoundingClientRect();
+    const xm = ((ev.clientX - rect.left) / rect.width) * R.WM + R.X0;
+    const ym = ((ev.clientY - rect.top) / rect.height) * R.HM + R.Y0;
+    let mejor = null, dm = Infinity;
+    for (const b of a.lectura.burbujas) { if (b.tipo !== 'q') continue; const d = Math.hypot(b.x - xm, b.y - ym); if (d < dm) { dm = d; mejor = b; } }
+    if (!mejor || dm > 4) return;
+    const L = LETRAS[mejor.c];
+    a.resp = a.resp.slice(0, mejor.q) + (a.resp[mejor.q] === L ? '-' : L) + a.resp.slice(mejor.q + 1);
+    a.manual = true; refrescarNota();
+  };
+}
+
+async function procesarArchivo(file) {
+  if (!file) return;
+  S.procesando = true; S.actual = null; pintar();
+  try {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    const max = 1600;
+    const s = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.round(img.naturalWidth * s), hh = Math.round(img.naturalHeight * s);
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = hh;
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0, w, hh);
+    URL.revokeObjectURL(url);
+    await new Promise((r) => setTimeout(r, 30));
+    leerCanvas(cv, false);
+  } catch (e) {
+    S.procesando = false;
+    S.actual = null; pintar();
+    mostrarError('No se pudo abrir la imagen. Prueba con otra foto.');
+  }
+}
+function leerCanvas(cv, ejemplo) {
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  const g = OMR.grisDeCanvas(ctx, cv.width, cv.height);
+  const r = OMR.analizar(g, cv.width, cv.height);
+  S.procesando = false;
+  if (!r.ok) { S.actual = null; pintar(); mostrarError(r.error); return; }
+  // Recalcular H con las esquinas elegidas (para recorte y toques)
+  r.H = homografiaDe(r.esquinas);
+  S.actual = { lectura: r, canvas: cv, resp: r.respuestas, numero: r.numero, ejemplo, manual: false };
+  pintar();
+  const card = $('#resultado'); if (card && !ejemplo) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function homografiaDe(dst) {
+  // misma homografía que usó el lector: plantilla -> imagen
+  const src = OMR.T.fid; const A = [], b = [];
+  for (let i = 0; i < 4; i++) { const [x, y] = src[i], [u, v] = dst[i]; A.push([x, y, 1, 0, 0, 0, -u * x, -u * y]); b.push(u); A.push([0, 0, 0, x, y, 1, -v * x, -v * y]); b.push(v); }
+  for (let c = 0; c < 8; c++) { let p = c; for (let r = c + 1; r < 8; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r; [A[c], A[p]] = [A[p], A[c]]; [b[c], b[p]] = [b[p], b[c]]; for (let r = 0; r < 8; r++) { if (r === c) continue; const f = A[r][c] / A[c][c]; for (let k = c; k < 8; k++) A[r][k] -= f * A[c][k]; b[r] -= f * b[c]; } }
+  const q = b.map((v, i) => v / A[i][i]); return [q[0], q[1], q[2], q[3], q[4], q[5], q[6], q[7], 1];
+}
+function mostrarError(msg) {
+  const v = $('#vista');
+  const el = h('div', { class: 'alerta error', role: 'alert' }, msg);
+  const cap = v.querySelector('.captura');
+  if (cap) cap.after(el); else v.prepend(el);
+}
+$('#inCamara').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; procesarArchivo(f); });
+$('#inGaleria').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; procesarArchivo(f); });
+
+async function guardarActual(otra) {
+  const a = S.actual; if (!a || !a.numero || a.ejemplo) return;
+  const id = docRes();
+  const doc = S.res[id] || { filas: {} };
+  const nuevo = JSON.parse(JSON.stringify(doc));
+  nuevo.filas[a.numero] = { n: a.numero, resp: a.resp, t: Date.now(), manual: !!a.manual };
+  try {
+    $('#btnGuardar').disabled = true; $('#btnGuardarSolo').disabled = true;
+    await Almacen.escribir(id, nuevo);
+    S.res[id] = nuevo;
+    const c = calificar(a.resp);
+    toast('Guardado: N.° ' + a.numero + ' · nota ' + coma(c.nota));
+    S.actual = null; pintar();
+    if (otra) abrirEscaner();
+  } catch (e) {
+    toast(e && e.code === 'quota_exceeded' ? 'No hay espacio para guardar más datos.' : 'No se pudo guardar. Revisa la conexión e intenta de nuevo.');
+    pintar();
+  }
+}
+
+// Hoja de ejemplo dibujada con la misma plantilla
+function hojaEjemplo(resp, num) {
+  const s = 6.5, W = 1400, H = 620;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const c = cv.getContext('2d', { willReadFrequently: true });
+  c.fillStyle = '#5d6166'; c.fillRect(0, 0, W, H);
+  c.save(); c.translate(W / 2, H / 2); c.rotate(-0.045); c.translate(-90 * s, -23 * s);
+  c.fillStyle = '#f7f6f1'; c.fillRect(-9 * s, -19 * s, 198 * s, 82 * s);
+  const T = OMR.T;
+  c.fillStyle = '#111';
+  for (const [x, y] of T.fid) c.fillRect((x - 3.5) * s, (y - 3.5) * s, 7 * s, 7 * s);
+  c.fillRect((T.orient[0] - 2) * s, (T.orient[1] - 2) * s, 4 * s, 4 * s);
+  c.font = 'bold ' + (3.2 * s) + 'px Arial'; c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.fillText('HOJA DE RESPUESTAS', 90 * s, -14 * s);
+  c.font = (2.6 * s) + 'px Arial'; c.textAlign = 'left';
+  c.fillText('NOMBRE Y APELLIDOS: ________________________________', -3.5 * s, -7 * s);
+  c.fillText('N.° DE LISTA', 6 * s, 7 * s);
+  const d = Math.floor(num / 10), u = num % 10;
+  const burb = (x, y, txt, lleno) => {
+    if (lleno) { c.fillStyle = '#2b2b2b'; c.beginPath(); c.arc(x * s, y * s, 2.0 * s, 0, 7); c.fill(); }
+    c.strokeStyle = '#111'; c.lineWidth = 0.35 * s; c.beginPath(); c.arc(x * s, y * s, T.r * s, 0, 7); c.stroke();
+    if (!lleno) { c.fillStyle = '#8a8a8a'; c.font = (1.9 * s) + 'px Arial'; c.textAlign = 'center'; c.fillText(txt, x * s, y * s + 0.1 * s); }
+  };
+  for (let i = 0; i < T.dec.n; i++) burb(T.dec.x0 + i * T.dec.dx, T.dec.y, String(i), i === d);
+  for (let i = 0; i < T.uni.n; i++) burb(T.uni.x0 + i * T.uni.dx, T.uni.y, String(i), i === u);
+  c.fillStyle = '#111'; c.font = 'bold ' + (2.5 * s) + 'px Arial'; c.textAlign = 'center';
+  for (let q = 0; q < 20; q++) {
+    const x = T.q.x0 + q * T.q.dx;
+    c.fillStyle = '#111'; c.font = 'bold ' + (2.5 * s) + 'px Arial'; c.fillText(String(q + 1), x * s, 14 * s);
+    for (let k = 0; k < 4; k++) burb(x, T.q.rows[k], LETRAS[k], resp[q] === LETRAS[k]);
+  }
+  c.fillStyle = '#111'; c.font = 'bold ' + (3 * s) + 'px Arial';
+  LETRAS.forEach((l, k) => c.fillText(l, 7.5 * s, T.q.rows[k] * s));
+  c.restore();
+  return cv;
+}
+function cargarEjemplo() {
+  const cv = hojaEjemplo('BDDCABCBCCACDBCADB-D', 12);
+  leerCanvas(cv, true);
+}
+
+// ---------------------------------------------------------------- resultados
+function filasOrdenadas() {
+  return Object.values(filas()).sort((a, b) => a.n - b.n);
+}
+function vistaResultados() {
+  const ex = examen(), gr = grupo();
+  const fs = filasOrdenadas();
+  const out = [];
+  if (!fs.length) {
+    out.push(h('div', { class: 'vacio' }, 'Todavía no hay hojas calificadas de ' + gr.nombre + ' en «' + ex.nombre + '». Ve a Calificar y toma la foto de la primera hoja.'));
+    return out;
+  }
+  const notas = fs.map((f) => calificar(f.resp).nota);
+  const prom = notas.reduce((s, v) => s + v, 0) / notas.length;
+  const aprob = notas.filter((n) => n >= S.config.desempeno.basico).length;
+  out.push(h('div', { class: 'cifras' },
+    h('div', { class: 'cifra' }, h('b', {}, String(fs.length)), h('span', {}, 'hojas calificadas')),
+    h('div', { class: 'cifra' }, h('b', {}, coma(prom, 2)), h('span', {}, 'promedio del grupo')),
+    h('div', { class: 'cifra' }, h('b', {}, aprob + '/' + fs.length), h('span', {}, 'con nota ≥ ' + coma(S.config.desempeno.basico)))));
+  if (gr.lista.length) {
+    const faltan = gr.lista.map((_, i) => i + 1).filter((n) => !filas()[n]);
+    if (faltan.length) out.push(h('div', { class: 'aviso' }, 'Faltan por calificar (' + faltan.length + '): ' + faltan.map((n) => n + ' ' + (gr.lista[n - 1] || '').split(' ')[0]).join(', ')));
+  }
+  const clave = ex.clave || '';
+  const tbody = h('tbody', {}, fs.map((f) => {
+    const c = calificar(f.resp); const [dT, dC] = desempeno(c.nota);
+    const respCel = h('td', { class: 'resp' });
+    for (let i = 0; i < f.resp.length; i++) { const ch = f.resp[i]; respCel.append(ch !== clave[i] ? h('span', { class: 'x' }, ch) : ch); if (i === 9) respCel.append(' '); }
+    const conf = S.confirmar === f.n;
+    const acc = h('td', {}, conf
+      ? h('span', { class: 'fila-botones' }, h('button', { class: 'btn chico peligro', onclick: () => borrarFila(f.n) }, 'Sí, eliminar'), h('button', { class: 'btn chico', onclick: () => { S.confirmar = null; pintar(); } }, 'No'))
+      : h('button', { class: 'btn chico', onclick: () => { S.confirmar = f.n; pintar(); } }, 'Eliminar'));
+    return h('tr', {}, h('td', { class: 'num' }, String(f.n)), h('td', {}, nombreDe(f.n) || '—'), h('td', { class: 'num' }, c.ac + '/' + c.total),
+      h('td', { class: 'num' }, h('b', {}, coma(c.nota))), h('td', {}, h('span', { class: 'chip ' + dC }, dT)), respCel, acc);
+  }));
+  out.push(h('div', { class: 'tabla-wrap' }, h('table', {},
+    h('thead', {}, h('tr', {}, ['N.°', 'Estudiante', 'Aciertos', 'Nota', 'Desempeño', 'Respuestas', ''].map((t) => h('th', {}, t)))), tbody)));
+  out.push(h('div', { class: 'ayuda' }, 'En rojo, las respuestas distintas de la clave. Clave: ' + clave.slice(0, 10) + ' ' + clave.slice(10)));
+  const botones = h('div', { class: 'fila-botones' },
+    h('button', { class: 'btn', onclick: copiarExcel }, 'Copiar para Excel'));
+  out.push(botones);
+  botones.append(h('button', { class: 'btn', onclick: () => guardarArchivo(idSeguro(examen().nombre) + '_' + idSeguro(grupo().nombre) + '.csv', '\ufeff' + tablaTexto(';'), 'text/csv') }, 'Exportar CSV'));
+  return out;
+}
+function tablaTexto(sep) {
+  const ex = examen(); const clave = ex.clave || '';
+  const n = clave.length || 20;
+  const cab = ['N.°', 'Estudiante', 'Aciertos', 'Total', 'Nota', 'Desempeño'].concat(Array.from({ length: n }, (_, i) => 'P' + (i + 1)));
+  const lineas = [cab.join(sep), ['', 'CLAVE', '', '', '', ''].concat(clave.split('')).join(sep)];
+  for (const f of filasOrdenadas()) {
+    const c = calificar(f.resp);
+    lineas.push([f.n, (nombreDe(f.n) || '').replace(/[;\t\n]/g, ' '), c.ac, c.total, coma(c.nota), desempeno(c.nota)[0]].concat(f.resp.slice(0, n).split('')).join(sep));
+  }
+  return lineas.join('\r\n');
+}
+async function copiarExcel() {
+  const txt = tablaTexto('\t');
+  try { await navigator.clipboard.writeText(txt); toast('Copiado. Pégalo en Excel.'); }
+  catch (e) {
+    const ta = h('textarea', { 'aria-label': 'Tabla para copiar' }); ta.value = txt;
+    $('#vista').append(ta); ta.select(); toast('Selecciona y copia el texto que apareció abajo.');
+  }
+}
+async function borrarFila(n) {
+  const id = docRes(); const nuevo = JSON.parse(JSON.stringify(S.res[id] || { filas: {} }));
+  delete nuevo.filas[n];
+  try { await Almacen.escribir(id, nuevo); S.res[id] = nuevo; S.confirmar = null; toast('Eliminada la hoja del N.° ' + n); pintar(); }
+  catch (e) { toast('No se pudo eliminar. Intenta de nuevo.'); }
+}
+
+// ---------------------------------------------------------------- análisis
+function vistaAnalisis() {
+  const ex = examen(); const fs = filasOrdenadas();
+  const clave = ex.clave || '';
+  if (!fs.length) return [h('div', { class: 'vacio' }, 'El análisis aparece cuando hayas guardado al menos una hoja de este grupo.')];
+  const conJust = clave === CLAVE_P3;
+  const out = [];
+  const n = clave.length;
+  const datos = [];
+  for (let i = 0; i < n; i++) {
+    const cuenta = { A: 0, B: 0, C: 0, D: 0, '-': 0, '*': 0 };
+    for (const f of fs) cuenta[f.resp[i] in cuenta ? f.resp[i] : '-']++;
+    datos.push({ i, cuenta, pct: cuenta[clave[i]] / fs.length });
+  }
+  const dif = [...datos].sort((a, b) => a.pct - b.pct).slice(0, 3);
+  const dist = { Superior: 0, Alto: 0, 'Básico': 0, Bajo: 0 };
+  fs.forEach((f) => dist[desempeno(calificar(f.resp).nota)[0]]++);
+  out.push(h('div', { class: 'cifras' },
+    Object.entries(dist).map(([k, v]) => h('div', { class: 'cifra' }, h('b', {}, String(v)), h('span', {}, 'desempeño ' + k.toLowerCase())))));
+  out.push(h('div', { class: 'tarjeta' }, h('div', { class: 'etiqueta' }, 'Preguntas con menos aciertos'),
+    h('div', {}, dif.map((d) => h('div', {}, 'Pregunta ' + (d.i + 1) + (conJust ? ' · ' + JUST[d.i].tema : '') + ': ' + Math.round(d.pct * 100) + ' % de aciertos')))));
+  for (const d of datos) {
+    const k = clave[d.i];
+    let peor = null;
+    for (const L of LETRAS) if (L !== k && d.cuenta[L] && (!peor || d.cuenta[L] > d.cuenta[peor])) peor = L;
+    const det = h('details', { class: 'preg' },
+      h('summary', {}, h('span', { class: 'pn' }, 'P' + (d.i + 1)), h('span', { class: 'pt' }, conJust ? JUST[d.i].tema : 'Clave ' + k), h('span', { class: 'pp' }, Math.round(d.pct * 100) + ' %'),
+        h('span', { class: 'barra-pct' }, h('i', { style: 'width:' + Math.round(d.pct * 100) + '%' }))),
+      h('div', { class: 'opciones' },
+        LETRAS.map((L) => h('div', { class: 'op' + (L === k ? ' correcta' : '') + (L === peor && d.cuenta[L] >= Math.max(2, fs.length * 0.25) ? ' fuerte' : '') }, h('span', {}, L), h('b', {}, String(d.cuenta[L])))),
+        h('div', { class: 'op' }, h('span', {}, 'Vacía'), h('b', {}, String(d.cuenta['-'] + d.cuenta['*'])))),
+      conJust ? h('div', { class: 'explica' }, h('b', {}, JUST[d.i].comp + ' · ' + JUST[d.i].dba + '. '), JUST[d.i].explicacion) : null);
+    out.push(det);
+  }
+  out.push(h('div', { class: 'ayuda' }, 'El recuadro rojo señala la opción incorrecta que escogió al menos la cuarta parte del grupo: ahí está el error más común.'));
+  return out;
+}
+
+// ---------------------------------------------------------------- ajustes
+function vistaAjustes() {
+  const ex = examen();
+  const out = [];
+  // Examen
+  const inNom = h('input', { type: 'text', id: 'inNomExamen', value: ex.nombre });
+  const inClave = h('input', { type: 'text', id: 'inClave', value: ex.clave, autocapitalize: 'characters', spellcheck: 'false', style: 'font-family:var(--mono);letter-spacing:0.12em' });
+  const estadoClave = h('div', { class: 'ayuda' });
+  const revisarClave = () => {
+    const v = inClave.value.toUpperCase().replace(/[^ABCD]/g, '');
+    inClave.value = v;
+    estadoClave.textContent = v.length + ' respuestas' + (v.length === 20 ? ' · lista para calificar' : v.length > 20 ? ' · la hoja tiene 20 preguntas como máximo' : '');
+  };
+  inClave.addEventListener('input', revisarClave); revisarClave();
+  const radios = h('div', { class: 'radios' },
+    h('label', {}, h('input', { type: 'radio', name: 'escala', value: 'proporcional', checked: ex.escala !== 'lineal' }), h('span', {}, 'Proporcional: aciertos ÷ total × 5, con mínimo 1,0 (17 de 20 → 4,3)')),
+    h('label', {}, h('input', { type: 'radio', name: 'escala', value: 'lineal', checked: ex.escala === 'lineal' }), h('span', {}, 'De 1,0 a 5,0: 1 + 4 × aciertos ÷ total (17 de 20 → 4,4)')));
+  const d = S.config.desempeno;
+  const inB = h('input', { type: 'number', step: '0.1', id: 'inBas', value: d.basico }), inA = h('input', { type: 'number', step: '0.1', id: 'inAlt', value: d.alto }), inS = h('input', { type: 'number', step: '0.1', id: 'inSup', value: d.superior });
+  out.push(h('section', { class: 'tarjeta' },
+    h('div', { class: 'etiqueta' }, 'Examen activo'),
+    h('label', { class: 'campo', for: 'inNomExamen' }, h('span', {}, 'Nombre'), inNom),
+    h('label', { class: 'campo', for: 'inClave' }, h('span', {}, 'Clave de respuestas (en orden, de la 1 a la 20)'), inClave), estadoClave,
+    h('div', { class: 'campo' }, h('span', {}, 'Cómo se calcula la nota'), radios),
+    h('div', { class: 'campo' }, h('span', {}, 'Desempeños (desde)'), h('div', { class: 'umbral' },
+      h('label', { class: 'campo', for: 'inBas' }, h('span', {}, 'Básico'), inB), h('label', { class: 'campo', for: 'inAlt' }, h('span', {}, 'Alto'), inA), h('label', { class: 'campo', for: 'inSup' }, h('span', {}, 'Superior'), inS)),
+      h('div', { class: 'ayuda' }, 'Por defecto, la escala nacional del Decreto 1290. Ajústala si el SIEE del colegio usa otros rangos.')),
+    h('div', { class: 'fila-botones' },
+      h('button', { class: 'btn primario', id: 'btnGuardarExamen', onclick: async () => {
+        ex.nombre = inNom.value.trim() || ex.nombre;
+        ex.clave = inClave.value.slice(0, 20);
+        ex.escala = radios.querySelector('input:checked').value;
+        const nb = parseFloat(inB.value), na = parseFloat(inA.value), ns = parseFloat(inS.value);
+        if (nb < na && na < ns) S.config.desempeno = { basico: nb, alto: na, superior: ns };
+        try { await guardarConfig(); toast('Ajustes guardados'); } catch (e) { toast('No se pudieron guardar los ajustes.'); }
+        pintar();
+      } }, 'Guardar examen'),
+      h('button', { class: 'btn', onclick: async () => {
+        const id = 'ex' + Date.now().toString(36);
+        S.config.examenes.push({ id, nombre: 'Examen nuevo', clave: '', escala: 'proporcional' });
+        S.config.activo = id; await cargarResultados();
+        try { await guardarConfig(); } catch (e) {}
+        toast('Examen nuevo creado: escribe su nombre y su clave'); pintar();
+      } }, 'Crear otro examen'))));
+  // Grupos
+  const gruposSec = h('section', { class: 'tarjeta' }, h('div', { class: 'etiqueta' }, 'Grupos y listas de estudiantes'),
+    h('div', { class: 'ayuda' }, 'Escribe un estudiante por línea, en el orden de la lista: la línea 1 es el N.° 1. Así la app muestra el nombre al leer la hoja.'));
+  for (const g of S.config.grupos) {
+    const inG = h('input', { type: 'text', id: 'nomG-' + g.id, value: g.nombre });
+    const ta = h('textarea', { id: 'lista-' + g.id, placeholder: '1. Primer estudiante de la lista\n2. …' });
+    ta.value = g.lista.join('\n');
+    const conf = S.confirmar === 'g:' + g.id;
+    gruposSec.append(h('div', { class: 'grupo-ed' },
+      h('label', { class: 'campo', for: 'nomG-' + g.id }, h('span', {}, 'Nombre del grupo'), inG),
+      h('label', { class: 'campo', for: 'lista-' + g.id }, h('span', {}, 'Lista (' + g.lista.length + ' estudiantes)'), ta),
+      h('div', { class: 'fila-botones' },
+        h('button', { class: 'btn', onclick: async () => {
+          g.nombre = inG.value.trim() || g.nombre;
+          g.lista = ta.value.split('\n').map((l) => l.replace(/^\s*\d+[\.\)\-]?\s*/, '').trim()).filter(Boolean);
+          try { await guardarConfig(); toast('Grupo guardado'); } catch (e) { toast('No se pudo guardar el grupo.'); }
+          pintar();
+        } }, 'Guardar grupo'),
+        S.config.grupos.length > 1 ? (conf
+          ? h('button', { class: 'btn peligro', onclick: async () => {
+              S.config.grupos = S.config.grupos.filter((x) => x.id !== g.id);
+              if (S.config.grupoActivo === g.id) S.config.grupoActivo = S.config.grupos[0].id;
+              S.confirmar = null; await cargarResultados();
+              try { await guardarConfig(); toast('Grupo eliminado de la lista'); } catch (e) {}
+              pintar();
+            } }, 'Sí, quitar el grupo')
+          : h('button', { class: 'btn peligro', onclick: () => { S.confirmar = 'g:' + g.id; pintar(); } }, 'Quitar grupo')) : null)));
+  }
+  gruposSec.append(h('button', { class: 'btn', onclick: async () => {
+    const id = 'g' + Date.now().toString(36);
+    S.config.grupos.push({ id, nombre: 'Quinto · grupo ' + (S.config.grupos.length + 1), lista: [] });
+    try { await guardarConfig(); } catch (e) {}
+    pintar();
+  } }, 'Agregar grupo'));
+  out.push(gruposSec);
+  out.push(h('section', { class: 'tarjeta' }, h('div', { class: 'etiqueta' }, 'Listas y copia de seguridad'),
+    h('div', { class: 'ayuda' }, 'Importa los Excel de «Lista de estudiantes por grupo» que descargas de la plataforma del colegio (puedes elegir los cinco a la vez) o el archivo de listas que te preparó Claude. Cada grupo se reemplaza con su lista nueva.'),
+    h('div', { class: 'fila-botones' },
+      h('button', { class: 'btn', id: 'btnImportar', onclick: () => $('#inListas').click() }, 'Importar listas'),
+      h('button', { class: 'btn', id: 'btnRespaldo', onclick: () => guardarArchivo('calificador-respaldo-' + new Date().toISOString().slice(0, 10) + '.json', JSON.stringify({ app: 'calificador', v: 1, datos: Almacen.todo() }), 'application/json') }, 'Exportar copia de seguridad'),
+      h('button', { class: 'btn', id: 'btnRestaurar', onclick: () => $('#inRespaldo').click() }, 'Restaurar copia'))));
+  out.push(h('div', { class: 'ayuda' }, 'Los grupos, las listas y las notas se guardan solo en este teléfono; no se envían a ningún servidor. Exporta una copia de seguridad de vez en cuando.'));
+  return out;
+}
+
+// ---------------------------------------------------------------- iPhone
+const esIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const enPantallaInicio = () => window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+
+// ---------------------------------------------------------------- escáner en vivo
+const Esc = { stream: null, timer: null, prev: null, trabajo: document.createElement('canvas') };
+async function abrirEscaner() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { $('#inCamara').click(); return; }
+  try {
+    Esc.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
+  } catch (e) {
+    toast('No se pudo abrir la cámara. Revisa el permiso de cámara para Safari en Ajustes del iPhone.');
+    return;
+  }
+  const v = $('#video');
+  v.srcObject = Esc.stream;
+  $('#escaner').hidden = false;
+  try { await v.play(); } catch (e) {}
+  Esc.prev = null;
+  estadoEsc('Apunta a una tirilla: que se vean los cuatro cuadros negros.', false);
+  ciclo();
+}
+function cerrarEscaner() {
+  clearTimeout(Esc.timer); Esc.timer = null;
+  if (Esc.stream) { Esc.stream.getTracks().forEach((t) => t.stop()); Esc.stream = null; }
+  $('#video').srcObject = null;
+  $('#escaner').hidden = true;
+  const g = $('#guia'); g.getContext('2d').clearRect(0, 0, g.width, g.height);
+}
+function estadoEsc(txt, ok) { const e = $('#escEstado'); e.textContent = txt; e.className = 'esc-estado' + (ok ? ' ok' : ''); }
+function cuadroVideo() {
+  const v = $('#video');
+  const w0 = v.videoWidth, h0 = v.videoHeight;
+  if (!w0 || !h0) return null;
+  const s = Math.min(1, 1400 / Math.max(w0, h0));
+  const c = Esc.trabajo;
+  c.width = Math.round(w0 * s); c.height = Math.round(h0 * s);
+  c.getContext('2d', { willReadFrequently: true }).drawImage(v, 0, 0, c.width, c.height);
+  return c;
+}
+function leerCuadro(c) {
+  const g = OMR.grisDeCanvas(c.getContext('2d', { willReadFrequently: true }), c.width, c.height);
+  return OMR.analizar(g, c.width, c.height);
+}
+function copiarCanvas(c) { const k = document.createElement('canvas'); k.width = c.width; k.height = c.height; k.getContext('2d').drawImage(c, 0, 0); return k; }
+function dibujarGuia(r, c) {
+  const g = $('#guia'), v = $('#video');
+  const W = g.clientWidth, H = g.clientHeight;
+  const dpr = window.devicePixelRatio || 1;
+  g.width = Math.round(W * dpr); g.height = Math.round(H * dpr);
+  const ctx = g.getContext('2d');
+  ctx.clearRect(0, 0, g.width, g.height);
+  if (!r || !r.ok || !v.videoWidth) return;
+  const esc = Math.min(W / v.videoWidth, H / v.videoHeight);
+  const ox = (W - v.videoWidth * esc) / 2, oy = (H - v.videoHeight * esc) / 2;
+  const k = v.videoWidth / c.width;
+  ctx.beginPath();
+  r.esquinas.forEach(([x, y], i) => { const px = (ox + x * k * esc) * dpr, py = (oy + y * k * esc) * dpr; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); });
+  ctx.closePath();
+  ctx.lineWidth = 4 * dpr; ctx.strokeStyle = '#6fe3a1'; ctx.stroke();
+  ctx.fillStyle = 'rgba(111,227,161,0.12)'; ctx.fill();
+}
+function ciclo() {
+  Esc.timer = setTimeout(() => {
+    if (!Esc.stream) return;
+    const c = cuadroVideo();
+    if (c) {
+      const r = leerCuadro(c);
+      dibujarGuia(r, c);
+      if (r.ok) {
+        const firma = r.respuestas + '|' + r.numero;
+        if (Esc.prev === firma) {
+          const foto = copiarCanvas(c);
+          if (navigator.vibrate) navigator.vibrate(60);
+          cerrarEscaner();
+          leerCanvas(foto, false);
+          return;
+        }
+        Esc.prev = firma;
+        estadoEsc('Hoja encontrada. No te muevas…', true);
+      } else {
+        Esc.prev = null;
+        estadoEsc('Apunta a una tirilla: que se vean los cuatro cuadros negros.', false);
+      }
+    }
+    ciclo();
+  }, 200);
+}
+$('#escCerrar').addEventListener('click', cerrarEscaner);
+$('#escLeer').addEventListener('click', () => {
+  const c = cuadroVideo(); if (!c) return;
+  const r = leerCuadro(c);
+  if (!r.ok) { estadoEsc(r.error, false); return; }
+  const foto = copiarCanvas(c);
+  cerrarEscaner(); leerCanvas(foto, false);
+});
+
+// ---------------------------------------------------------------- importar listas
+const XLSX_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+function cargarScript(src) {
+  return new Promise((ok, mal) => { const sc = document.createElement('script'); sc.src = src; sc.onload = ok; sc.onerror = () => mal(new Error('sin conexión')); document.head.append(sc); });
+}
+const MINUS = new Set(['de', 'del', 'la', 'las', 'los', 'y']);
+const titulo = (n) => String(n).toLowerCase().replace(/\s+/g, ' ').trim().split(' ').map((w) => MINUS.has(w) ? w : w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+function fusionarGrupo(nombre, lista) {
+  let g = S.config.grupos.find((x) => x.nombre === nombre);
+  if (!g) {
+    S.config.grupos = S.config.grupos.filter((x) => !(x.lista.length === 0 && /^Quinto · grupo/.test(x.nombre)));
+    g = { id: idSeguro(nombre.replace('°', '')) || ('g' + Date.now().toString(36)), nombre, lista: [] };
+    S.config.grupos.push(g);
+  }
+  g.lista = lista;
+  S.config.grupos.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  if (!S.config.grupos.find((x) => x.id === S.config.grupoActivo)) S.config.grupoActivo = S.config.grupos[0].id;
+  return lista.filter(Boolean).length;
+}
+async function importarListas(files) {
+  let total = 0; const grupos = [];
+  for (const f of files) {
+    const nom = f.name.toLowerCase();
+    try {
+      if (nom.endsWith('.json')) {
+        const o = JSON.parse(await f.text());
+        for (const g of (o.grupos || [])) { total += fusionarGrupo(g.nombre, g.lista || []); grupos.push(g.nombre); }
+      } else {
+        let filas;
+        if (nom.endsWith('.csv')) filas = (await f.text()).split(/\r?\n/).map((l) => l.split(/[;,\t]/));
+        else {
+          if (!window.XLSX) await cargarScript(XLSX_URL);
+          const wb = window.XLSX.read(await f.arrayBuffer(), { type: 'array' });
+          filas = window.XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: '' });
+        }
+        let gnom = null; const lista = [];
+        for (const r of filas) {
+          const txt = (r || []).join(' ');
+          const m = txt.match(/Grupo:\s*0?(\d{1,2})\s*([A-Za-z])\b/);
+          if (m && !gnom) gnom = m[1] + '°' + m[2].toUpperCase();
+          const num = parseInt(r && r[0], 10);
+          const nombre = r && (r[2] || r[1]);
+          if (Number.isFinite(num) && num > 0 && num < 100 && nombre && /[A-Za-zÁÉÍÓÚÑáéíóúñ]{3}/.test(nombre) && !/MATRICU|RETIRAD/.test(nombre)) lista[num - 1] = titulo(nombre);
+        }
+        if (!gnom) gnom = f.name.replace(/\.[^.]+$/, '');
+        const completa = Array.from({ length: lista.length }, (_, i) => lista[i] || '');
+        total += fusionarGrupo(gnom, completa); grupos.push(gnom);
+      }
+    } catch (e) { toast('No se pudo leer ' + f.name + (e && e.message === 'sin conexión' ? ' (se necesita internet la primera vez)' : '')); }
+  }
+  if (grupos.length) {
+    await guardarConfig();
+    await cargarResultados();
+    toast(total + ' estudiantes importados en ' + grupos.join(', '));
+  }
+  pintar();
+}
+$('#inListas').addEventListener('change', (e) => { const fs = [...e.target.files]; e.target.value = ''; if (fs.length) importarListas(fs); });
+$('#inRespaldo').addEventListener('change', async (e) => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try {
+    const o = JSON.parse(await f.text());
+    if (o.app !== 'calificador' || !o.datos) throw new Error();
+    Almacen.restaurar(o.datos);
+    S.res = {};
+    const cfg = await Almacen.leer('config');
+    if (cfg) S.config = Object.assign(JSON.parse(JSON.stringify(CONFIG_INICIAL)), cfg);
+    await cargarResultados();
+    toast('Copia restaurada'); pintar();
+  } catch (err) { toast('Ese archivo no es una copia de seguridad del calificador.'); }
+});
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+
+// ---------------------------------------------------------------- inicio
+(async function iniciar() {
+  S.config = JSON.parse(JSON.stringify(CONFIG_INICIAL));
+  pintar();
+  await Almacen.iniciar();
+  const cfg = await Almacen.leer('config');
+  if (cfg && cfg.examenes && cfg.grupos) S.config = Object.assign(JSON.parse(JSON.stringify(CONFIG_INICIAL)), cfg);
+  await cargarResultados();
+  if (!S.actual && !Object.keys(filas()).length) cargarEjemplo();
+  else pintar();
+})();
+</script>
+
+</body>
+</html>
